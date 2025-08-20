@@ -8,6 +8,7 @@ This guide helps you diagnose and resolve common issues with StressMaster.
 - [Installation Issues](#installation-issues)
 - [Service Startup Problems](#service-startup-problems)
 - [AI Model Issues](#ai-model-issues)
+- [Input Formatting Issues](#input-formatting-issues)
 - [Load Test Execution Problems](#load-test-execution-problems)
 - [Performance Issues](#performance-issues)
 - [Network and Connectivity](#network-and-connectivity)
@@ -113,29 +114,25 @@ newgrp docker
 docker run hello-world
 ```
 
-### Insufficient Disk Space
+### Unicode and Special Characters
 
-**Error:**
+**Issue:** Problems with Unicode characters, emojis, or special symbols
 
-```
-no space left on device
-```
+**Solution:** The system automatically normalizes:
 
-**Solution:**
+- Unicode smart quotes and apostrophes
+- Low-9 quotes and angle quotes
+- Ellipsis, en/em dashes
+- Excessive whitespace and formatting
+
+**If you still encounter issues:**
 
 ```bash
-# Check disk usage
-df -h
+# Check character encoding
+echo 'your-command' | hexdump -C
 
-# Clean Docker system
-docker system prune -a -f
-
-# Remove unused volumes
-docker volume prune -f
-
-# Check specific directory usage
-du -sh ~/.docker
-du -sh /var/lib/docker
+# Try with simple ASCII characters
+Send 1 POST request to https://api.example.com/test with body {"id": "test123"}
 ```
 
 ## Service Startup Problems
