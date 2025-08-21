@@ -83,6 +83,10 @@ export class ResponseHandler {
           parsedSpec = parsedJson as LoadTestSpec;
         }
       } catch (error) {
+        console.warn("AI response JSON parsing failed:", error);
+        console.warn("Raw AI response:", response);
+        console.warn("Cleaned response:", cleanedResponse);
+
         // If JSON parsing fails, attempt fallback parsing
         return this.fallbackParsing(response, originalInput);
       }

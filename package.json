@@ -1,6 +1,6 @@
 {
   "name": "stressmaster",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "StressMaster - AI-powered load testing tool using natural language commands",
   "main": "dist/cli.js",
   "scripts": {

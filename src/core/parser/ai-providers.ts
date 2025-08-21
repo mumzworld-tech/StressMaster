@@ -275,7 +275,7 @@ export class OllamaClient {
  */
 export class OllamaProvider extends BaseAIProvider {
   private static readonly DEFAULT_ENDPOINT = "http://localhost:11434";
-  private static readonly DEFAULT_MODEL = "llama3.2:1b";
+  private static readonly DEFAULT_MODEL = "llama3.1:8b";
   private ollamaClient: OllamaClient;
 
   constructor(config: AIProviderConfig) {

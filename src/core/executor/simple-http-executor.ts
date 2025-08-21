@@ -328,6 +328,10 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
 
       // Handle requestId specifically with incremental support
       if (lowerName.includes("requestid")) {
+        console.log("🔍 Executor: Processing requestId variable:", {
+          parameters,
+          requestIndex,
+        });
         // If user provided a base requestId, increment it
         if (parameters?.baseValue && requestIndex !== undefined) {
           const baseId = parameters.baseValue.toString();

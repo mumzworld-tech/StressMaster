@@ -46,11 +46,24 @@ export function normalizeWhitespace(input: string): string {
 }
 
 /**
- * Cleans JSON response by removing markdown formatting
+ * Cleans JSON response by removing markdown formatting and extra text
  */
 export function cleanJsonResponse(response: string): string {
+  if (!response || typeof response !== "string") {
+    return "{}";
+  }
+
+  let cleaned = response;
+
   // Remove markdown code blocks
-  let cleaned = response.replace(/```json\s*/g, "").replace(/```\s*/g, "");
+  cleaned = cleaned.replace(/```json\s*/g, "").replace(/```\s*/g, "");
+
+  // Remove common AI prefixes/suffixes
+  cleaned = cleaned.replace(/^Here's the JSON:/i, "");
+  cleaned = cleaned.replace(/^The JSON response is:/i, "");
+  cleaned = cleaned.replace(/^Response:/i, "");
+  cleaned = cleaned.replace(/^JSON:/i, "");
+  cleaned = cleaned.replace(/^Here's the parsed command:/i, "");
 
   // Remove any text before the first {
   const firstBrace = cleaned.indexOf("{");
@@ -64,7 +77,15 @@ export function cleanJsonResponse(response: string): string {
     cleaned = cleaned.substring(0, lastBrace + 1);
   }
 
-  return cleaned.trim();
+  // Clean up any remaining whitespace and newlines
+  cleaned = cleaned.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+
+  // If we don't have valid JSON, return empty object
+  if (!cleaned.startsWith("{") || !cleaned.endsWith("}")) {
+    return "{}";
+  }
+
+  return cleaned;
 }
 
 /**

@@ -48,15 +48,15 @@ export interface InputFormat {
 export class PromptBuilder {
   private static readonly SYSTEM_PROMPT = `You are StressMaster's AI assistant that converts natural language descriptions into structured load test specifications. 
 
-Your task is to parse user commands and extract the following information:
+CRITICAL: You must respond with ONLY valid JSON. No explanations, no markdown, no extra text.
+
+Your task is to parse user commands and extract:
 - HTTP method (GET, POST, PUT, DELETE, etc.)
 - Target URL
 - Request payload template and variables
 - Load pattern (constant, ramp-up, spike, step)
 - Test duration and virtual users or RPS
 - Test type (spike, stress, endurance, volume, baseline)
-
-Always respond with valid JSON that matches the LoadTestSpec interface. If information is missing or ambiguous, use reasonable defaults and note ambiguities.
 
 CRITICAL RULES FOR JSON HANDLING:
 1. When the command contains a complete JSON object (like {"requestId": "seller-req1", "payload": [...]}), use that EXACT JSON as the request body
@@ -66,6 +66,7 @@ CRITICAL RULES FOR JSON HANDLING:
 5. Use the exact HTTP method specified in the command
 6. If the command says "increment order_id and increment_id", create template variables ONLY for those specific fields
 7. Preserve the complete JSON structure as-is
+8. Respond with ONLY the JSON object, no other text
 
 Key guidelines:
 1. Generate unique IDs using timestamp-based approach
@@ -81,17 +82,36 @@ EXAMPLE: If command is "send 2 POST requests to http://backbone.mumz.io/magento/
 - Use body: {"requestId": "seller-req1", "payload": [{"order_id": "{{order_id}}"}]}
 - Create variable: order_id with type "incremental"
 
-Response format must be valid JSON matching this TypeScript interface:
+RESPOND WITH ONLY THIS JSON FORMAT:
 {
-  "id": "string",
-  "name": "string", 
-  "description": "string",
-  "testType": "spike" | "stress" | "endurance" | "volume" | "baseline",
-  "requests": [RequestSpec],
-  "loadPattern": LoadPattern,
-  "duration": Duration,
-  "workflow": WorkflowStep[] (optional),
-  "dataCorrelation": CorrelationRule[] (optional)
+  "id": "test_1234567890",
+  "name": "Load Test",
+  "description": "Parsed from user command",
+  "testType": "baseline",
+  "requests": [
+    {
+      "method": "POST",
+      "url": "http://backbone.mumz.io/magento/qcomm-order",
+      "payload": {
+        "template": "{\\"requestId\\": \\"seller-req1\\", \\"payload\\": [{\\"order_id\\": \\"{{order_id}}\\"}]}",
+        "variables": [
+          {
+            "name": "order_id",
+            "type": "incremental",
+            "startValue": "5783136"
+          }
+        ]
+      }
+    }
+  ],
+  "loadPattern": {
+    "type": "constant",
+    "virtualUsers": 2
+  },
+  "duration": {
+    "value": 30,
+    "unit": "seconds"
+  }
 }`;
 
   private static readonly USER_PROMPT_TEMPLATE = `Parse this StressMaster command and convert it to a LoadTestSpec JSON:
