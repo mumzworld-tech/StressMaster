@@ -1,9 +1,24 @@
 #!/usr/bin/env node
 
 // CLI entry point for StressMaster
-import { CLIRunner } from "./cli/cli-runner";
+import { CLIRunner } from "./interfaces/cli/cli-runner";
+import { validateEnvironment } from "./config";
 
 async function main() {
+  // Validate environment configuration before starting
+  const envValidation = validateEnvironment();
+
+  if (!envValidation.valid) {
+    console.error("❌ Environment validation failed:");
+    envValidation.errors.forEach((error) => console.error(`  - ${error}`));
+    process.exit(1);
+  }
+
+  if (envValidation.warnings.length > 0) {
+    console.warn("⚠️  Environment warnings:");
+    envValidation.warnings.forEach((warning) => console.warn(`  - ${warning}`));
+  }
+
   const cli = new CLIRunner();
   await cli.run();
 }

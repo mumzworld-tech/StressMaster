@@ -88,83 +88,49 @@ Test https://api.example.com/users at 20 requests per second for 2 minutes
 
 ## Advanced Scenarios
 
-### Multi-Step User Workflow
+### Complex JSON Payloads
 
 **Command:**
 
 ```
-Create a user journey test:
-1. POST login to https://api.example.com/auth with username and password
-2. GET user profile using the auth token from step 1
-3. POST create order with random product data and auth token
-4. GET order status using order ID from step 3
-Run this workflow for 50 virtual users over 10 minutes
-```
-
-**What it does:**
-
-- Simulates realistic user behavior
-- Maintains session state between requests
-- Correlates data between steps
-- Runs concurrent user sessions
-
-**Generated Workflow Logic:**
-
-```javascript
-export default function () {
-  // Step 1: Login
-  let loginResponse = http.post("https://api.example.com/auth", {
-    username: "testuser",
-    password: "testpass",
-  });
-
-  let authToken = loginResponse.json("token");
-
-  // Step 2: Get profile
-  let profileResponse = http.get("https://api.example.com/profile", {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
-
-  // Step 3: Create order
-  let orderResponse = http.post(
-    "https://api.example.com/orders",
+Send POST requests to https://api.example.com/orders with complex JSON:
+{
+  "orderId": "{sequence}",
+  "customer": {
+    "name": "{randomString}",
+    "email": "customer{sequence}@example.com"
+  },
+  "items": [
     {
-      productId: `prod_${Math.random()}`,
-      quantity: Math.floor(Math.random() * 10) + 1,
-    },
-    {
-      headers: { Authorization: `Bearer ${authToken}` },
+      "productId": "PROD-{randomNumber}",
+      "quantity": "{randomNumber:1-10}"
     }
-  );
-
-  let orderId = orderResponse.json("orderId");
-
-  // Step 4: Check order status
-  http.get(`https://api.example.com/orders/${orderId}`, {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
+  ]
 }
 ```
 
-### Database Performance Testing
+**What it does:**
+
+- Generates complex nested JSON structures
+- Uses dynamic data generation for realistic payloads
+- Maintains data consistency across requests
+
+### Authentication Testing
 
 **Command:**
 
 ```
-Test database performance through REST API:
-- Create 500 users with POST to https://api.example.com/users
-- Read each user with GET requests
-- Update 50% of users with PUT requests
-- Delete 10% of users with DELETE requests
-Execute over 15 minutes with 20 concurrent users
+Test API with JWT authentication:
+1. POST login to get token
+2. Use token for subsequent requests
+3. Test 500 authenticated requests per minute
 ```
 
 **What it does:**
 
-- Tests full CRUD operations
-- Simulates realistic database load
-- Maintains data consistency
-- Measures performance across operations
+- Tests authentication system performance
+- Validates token handling
+- Tests secure endpoint access
 
 ## Load Patterns
 
@@ -240,7 +206,7 @@ Step 4: 200 users for 5 minutes
 
 ```
 Test JWT authentication flow:
-1. POST login to https://api.example.com/auth/login to get JWT token
+1. POST login to get JWT token
 2. Use token for 200 authenticated GET requests to https://api.example.com/protected/data
 3. Test token refresh every 50 requests
 Run for 100 virtual users over 20 minutes
@@ -260,35 +226,18 @@ Run for 100 virtual users over 20 minutes
 ```
 Test OAuth 2.0 flow:
 1. GET authorization code from https://api.example.com/oauth/authorize
-2. POST exchange code for access token at https://api.example.com/oauth/token
-3. Use access token for API calls to https://api.example.com/api/user
-4. Refresh token when needed
-Test with 50 concurrent OAuth flows
+2. POST authorization code to https://api.example.com/oauth/token
+3. Use access token for 300 API requests
+4. Test token refresh when expired
+Run 50 concurrent OAuth flows for 30 minutes
 ```
 
 **What it does:**
 
-- Tests complete OAuth flow performance
-- Validates token exchange mechanisms
-- Tests refresh token handling
-- Measures OAuth server performance
-
-### API Key Authentication
-
-**Command:**
-
-```
-Test API key authentication:
-Send 1000 requests to https://api.example.com/data with API key in header
-Test rate limiting behavior with different API keys
-```
-
-**What it does:**
-
-- Tests API key validation performance
-- Validates rate limiting mechanisms
-- Tests key rotation scenarios
-- Measures auth overhead
+- Tests OAuth 2.0 implementation
+- Validates token exchange process
+- Tests refresh token functionality
+- Measures OAuth performance impact
 
 ## API-Specific Examples
 
@@ -297,21 +246,20 @@ Test rate limiting behavior with different API keys
 **Command:**
 
 ```
-Comprehensive REST API test for https://api.example.com:
-- GET /users (list users) - 40% of requests
-- GET /users/{id} (get user) - 30% of requests
-- POST /users (create user) - 20% of requests
-- PUT /users/{id} (update user) - 8% of requests
-- DELETE /users/{id} (delete user) - 2% of requests
-Run 500 requests per minute for 30 minutes
+Test REST API endpoints:
+- GET /users - 40% of requests
+- POST /users - 20% of requests
+- PUT /users/{id} - 20% of requests
+- DELETE /users/{id} - 20% of requests
+Run 1000 total requests with 50 concurrent users
 ```
 
 **What it does:**
 
-- Tests realistic API usage patterns
-- Validates all CRUD operations
-- Measures performance across endpoints
-- Tests data consistency
+- Tests all CRUD operations
+- Simulates realistic API usage patterns
+- Measures performance across different operations
+- Validates API consistency
 
 ### GraphQL API Testing
 
@@ -319,30 +267,26 @@ Run 500 requests per minute for 30 minutes
 
 ```
 Test GraphQL API at https://api.example.com/graphql:
-Query 1: Get user with posts and comments (complex query)
-Query 2: Get user list with pagination
-Query 3: Create user mutation
-Query 4: Update user mutation
-Run 100 concurrent users making mixed queries
+Send query to get user with posts and comments
+Run 100 concurrent queries for 5 minutes
 ```
 
 **What it does:**
 
 - Tests GraphQL query performance
-- Validates complex nested queries
-- Tests mutation performance
-- Measures resolver efficiency
+- Validates complex data fetching
+- Measures GraphQL-specific metrics
+- Tests query optimization
 
 ### WebSocket Testing
 
 **Command:**
 
 ```
-Test WebSocket performance at wss://api.example.com/ws:
-- Connect 200 concurrent WebSocket connections
-- Send message every 5 seconds per connection
-- Measure message delivery latency
-- Test connection stability over 1 hour
+Test WebSocket at wss://api.example.com/ws:
+Connect 50 concurrent connections
+Send message every 10 seconds
+Maintain connections for 30 minutes
 ```
 
 **What it does:**
@@ -495,34 +439,6 @@ Test data processing and storage performance over 24 hours
 - Validates time-series data handling
 - Tests real-time processing capabilities
 - Measures storage performance
-
-### Microservices Testing
-
-**Command:**
-
-```
-Test microservices architecture:
-Service 1: User service (https://user-service.example.com)
-Service 2: Order service (https://order-service.example.com)
-Service 3: Payment service (https://payment-service.example.com)
-Service 4: Inventory service (https://inventory-service.example.com)
-
-Test complete order flow across all services:
-1. Create user in user service
-2. Create order in order service
-3. Check inventory in inventory service
-4. Process payment in payment service
-5. Update order status
-
-Run 500 complete workflows concurrently
-```
-
-**What it does:**
-
-- Tests service-to-service communication
-- Validates distributed transaction performance
-- Tests service dependency handling
-- Measures end-to-end latency
 
 ## Tips for Effective Load Testing
 

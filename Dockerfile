@@ -63,6 +63,9 @@ COPY package*.json ./
 COPY scripts/ ./scripts/
 RUN chmod +x ./scripts/*.sh
 
+# Copy configuration files
+COPY config/ ./config/
+
 # Create required directories
 RUN mkdir -p /app/data /app/scripts/k6 /app/results && \
     chown -R nodejs:nodejs /app
@@ -75,7 +78,7 @@ EXPOSE 3000
 
 # Health check with improved configuration
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD ./scripts/health-check.sh
+    CMD ./scripts/health-check.sh
 
 # Set environment variables
 ENV NODE_ENV=production

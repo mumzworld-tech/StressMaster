@@ -10,6 +10,7 @@ A local-first AI-powered load testing tool that accepts natural language command
 - **K6 Integration**: Generates and executes K6 scripts automatically
 - **Real-time Monitoring**: Live progress tracking and metrics
 - **Comprehensive Reporting**: Detailed analysis with AI-powered recommendations
+- **Export Formats**: JSON, CSV, and HTML export capabilities
 - **Docker-based**: Fully containerized for easy deployment
 - **No Cloud Dependencies**: Runs entirely on your local machine
 
@@ -18,7 +19,7 @@ A local-first AI-powered load testing tool that accepts natural language command
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   User Input    │───▶│   AI Parser      │───▶│  K6 Generator   │
-│ (Natural Lang.) │    │ (LLaMA3/Ollama)  │    │                 │
+│ (Natural Lang.) │    │ (AI Model)       │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                                                          │
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
@@ -73,6 +74,222 @@ Try your first load test:
 Send 100 GET requests to https://httpbin.org/get over 30 seconds
 ```
 
+## 🤖 AI Model Setup
+
+StressMaster supports multiple AI model configurations. Choose the setup that best fits your needs:
+
+### Option 1: Local Ollama (Recommended)
+
+**Advantages**: No API costs, completely private, works offline
+
+#### Setup Steps:
+
+1. **Install Ollama** (if not using Docker):
+
+   ```bash
+   # macOS/Linux
+   curl -fsSL https://ollama.ai/install.sh | sh
+
+   # Windows
+   # Download from https://ollama.ai/download
+   ```
+
+2. **Pull the LLaMA3 Model**:
+
+   ```bash
+   # Pull the recommended model
+   ollama pull llama3.2:1b
+
+   # Or try other models
+   ollama pull llama3:latest
+   ollama pull llama3.1:8b
+   ```
+
+3. **Configure StressMaster**:
+
+   ```bash
+   # Edit your .env file
+   AI_PROVIDER=ollama
+   OLLAMA_ENDPOINT=http://localhost:11434
+   MODEL_NAME=llama3.2:1b
+   ```
+
+4. **Start Ollama**:
+
+   ```bash
+   # Start Ollama service
+   ollama serve
+
+   # In another terminal, verify it's working
+   ollama list
+   ```
+
+#### Docker Setup (Alternative):
+
+```bash
+# Start Ollama in Docker
+docker run -d --name ollama -p 11434:11434 -v ollama_data:/root/.ollama ollama/ollama
+
+# Pull model
+docker exec -it ollama ollama pull llama3.2:1b
+```
+
+### Option 2: OpenAI API
+
+**Advantages**: Better performance, more reliable, no local setup
+
+#### Setup Steps:
+
+1. **Get OpenAI API Key**:
+
+   - Visit [OpenAI Platform](https://platform.openai.com/api-keys)
+   - Create a new API key
+   - Copy the key
+
+2. **Configure StressMaster**:
+
+   ```bash
+   # Edit your .env file
+   AI_PROVIDER=openai
+   OPENAI_API_KEY=your-api-key-here
+   OPENAI_MODEL=gpt-4
+   # or use gpt-3.5-turbo for cost savings
+   ```
+
+3. **Test Configuration**:
+   ```bash
+   # Test the API connection
+   curl -H "Authorization: Bearer your-api-key" \
+        https://api.openai.com/v1/models
+   ```
+
+### Option 3: Anthropic Claude
+
+**Advantages**: Excellent reasoning, good for complex parsing
+
+#### Setup Steps:
+
+1. **Get Anthropic API Key**:
+
+   - Visit [Anthropic Console](https://console.anthropic.com/)
+   - Create a new API key
+   - Copy the key
+
+2. **Configure StressMaster**:
+   ```bash
+   # Edit your .env file
+   AI_PROVIDER=anthropic
+   ANTHROPIC_API_KEY=your-api-key-here
+   ANTHROPIC_MODEL=claude-3-sonnet-20240229
+   ```
+
+### Option 4: Google Gemini
+
+**Advantages**: Good performance, competitive pricing
+
+#### Setup Steps:
+
+1. **Get Google API Key**:
+
+   - Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - Create a new API key
+   - Copy the key
+
+2. **Configure StressMaster**:
+   ```bash
+   # Edit your .env file
+   AI_PROVIDER=gemini
+   GEMINI_API_KEY=your-api-key-here
+   GEMINI_MODEL=gemini-pro
+   ```
+
+### Configuration File
+
+Create or edit `config/ai-config.json`:
+
+```json
+{
+  "provider": "ollama",
+  "ollama": {
+    "endpoint": "http://localhost:11434",
+    "model": "llama3.2:1b"
+  },
+  "openai": {
+    "apiKey": "your-openai-key",
+    "model": "gpt-4",
+    "maxTokens": 2000
+  },
+  "anthropic": {
+    "apiKey": "your-anthropic-key",
+    "model": "claude-3-sonnet-20240229",
+    "maxTokens": 2000
+  },
+  "gemini": {
+    "apiKey": "your-gemini-key",
+    "model": "gemini-pro",
+    "maxTokens": 2000
+  }
+}
+```
+
+### Model Comparison
+
+| Provider  | Model           | Cost              | Performance | Setup Complexity |
+| --------- | --------------- | ----------------- | ----------- | ---------------- |
+| Ollama    | LLaMA3.2:1b     | Free              | Good        | Medium           |
+| Ollama    | LLaMA3.1:8b     | Free              | Better      | Medium           |
+| OpenAI    | GPT-3.5-turbo   | $0.0015/1K tokens | Excellent   | Easy             |
+| OpenAI    | GPT-4           | $0.03/1K tokens   | Best        | Easy             |
+| Anthropic | Claude 3 Sonnet | $0.003/1K tokens  | Excellent   | Easy             |
+| Google    | Gemini Pro      | $0.0005/1K tokens | Good        | Easy             |
+
+### Troubleshooting AI Setup
+
+#### Ollama Issues:
+
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Restart Ollama
+sudo systemctl restart ollama
+# or
+ollama serve
+
+# Check model availability
+ollama list
+
+# Pull model if missing
+ollama pull llama3.2:1b
+```
+
+#### API Key Issues:
+
+```bash
+# Test OpenAI
+curl -H "Authorization: Bearer your-key" \
+     https://api.openai.com/v1/models
+
+# Test Anthropic
+curl -H "x-api-key: your-key" \
+     https://api.anthropic.com/v1/models
+
+# Test Gemini
+curl "https://generativelanguage.googleapis.com/v1beta/models?key=your-key"
+```
+
+#### Performance Optimization:
+
+```bash
+# For Ollama - increase memory
+export OLLAMA_HOST=0.0.0.0
+export OLLAMA_ORIGINS=*
+export OLLAMA_MODELS=/path/to/models
+
+# For better performance with local models
+ollama run llama3.2:1b --gpu
+```
+
 ## 💡 Usage Examples
 
 ### Basic Load Tests
@@ -80,7 +297,7 @@ Send 100 GET requests to https://httpbin.org/get over 30 seconds
 #### Simple GET Request Test
 
 ```
-Test https://api.example.com/users with 50 requests per second for 2 minutes
+Test https://api.example.com/users with 50 requests
 ```
 
 #### POST Request with Payload
@@ -93,19 +310,6 @@ Send 200 POST requests to https://api.example.com/orders with random order data
 
 ```
 Perform a spike test on https://api.example.com/products with 1000 requests in 10 seconds
-```
-
-### Advanced Scenarios
-
-#### Multi-step Workflow
-
-```
-Create a user workflow test:
-1. POST login to https://api.example.com/auth with credentials
-2. GET user profile using the auth token
-3. POST create order with random product data
-4. GET order status
-Run this for 100 virtual users over 5 minutes
 ```
 
 #### Stress Testing with Ramp-up
@@ -152,9 +356,15 @@ Key configuration options in `.env`:
 NODE_ENV=production
 APP_PORT=3000
 
-# Ollama/AI settings
+# AI Provider settings
+AI_PROVIDER=ollama
 OLLAMA_PORT=11434
-MODEL_NAME=llama3
+MODEL_NAME=llama3.2:1b
+
+# API Keys (if using cloud providers)
+OPENAI_API_KEY=your-openai-key
+ANTHROPIC_API_KEY=your-anthropic-key
+GEMINI_API_KEY=your-gemini-key
 
 # Resource limits
 OLLAMA_MEMORY_LIMIT=4g
@@ -224,25 +434,23 @@ Test API with JWT authentication:
 3. Test 500 authenticated requests per minute
 ```
 
-#### Database Load Testing
+#### Complex JSON Payloads
 
 ```
-Test database performance through API:
-- Create 1000 records with POST requests
-- Read records with GET requests at 200 RPS
-- Update 50% of records with PUT requests
-- Delete 10% of records with DELETE requests
-```
-
-#### Microservices Testing
-
-```
-Test microservice chain:
-1. POST to user-service to create user
-2. POST to order-service with user ID
-3. GET from inventory-service for stock check
-4. POST to payment-service for processing
-Run 100 complete workflows concurrently
+Send POST requests to https://api.example.com/orders with complex JSON:
+{
+  "orderId": "{sequence}",
+  "customer": {
+    "name": "{randomString}",
+    "email": "customer{sequence}@example.com"
+  },
+  "items": [
+    {
+      "productId": "PROD-{randomNumber}",
+      "quantity": "{randomNumber:1-10}"
+    }
+  ]
+}
 ```
 
 ### Performance Tuning
@@ -283,7 +491,6 @@ Check system status:
 ./scripts/monitor.sh monitor
 
 # Detailed health check
-curl http://localhost:3000/health
 curl http://localhost:11434/api/tags
 ```
 
@@ -348,11 +555,11 @@ docker-compose exec stressmaster ping your-target-api.com
 
 - Services communicate via isolated Docker network
 - Only necessary ports exposed to host
-- Input validation on all API endpoints
+- Input validation on all user inputs
 
 ### Data Security
 
-- No data sent to external services
+- No data sent to external services (with local Ollama)
 - Local model processing only
 - Configurable data retention policies
 
@@ -386,22 +593,6 @@ docker-compose up -d
 docker-compose -f docker-compose.yml -f docker-compose.ci.yml up --abort-on-container-exit
 ```
 
-## 📚 API Reference
-
-### REST API Endpoints
-
-- `POST /api/parse` - Parse natural language command
-- `POST /api/execute` - Execute load test
-- `GET /api/results/{id}` - Get test results
-- `GET /api/history` - Get test history
-- `GET /health` - Health check endpoint
-
-### WebSocket API
-
-- `/ws/progress` - Real-time test progress updates
-- `/ws/metrics` - Live performance metrics
-- `/ws/logs` - Streaming log output
-
 ## 🤝 Contributing
 
 ### Development Setup
@@ -425,13 +616,15 @@ npm test
 
 ```
 src/
-├── cli/           # Command-line interface
-├── parser/        # AI command parsing
-├── generator/     # K6 script generation
-├── executor/      # Test execution
-├── orchestrator/  # Workflow coordination
-├── analyzer/      # Results analysis
-└── types/         # TypeScript definitions
+├── interfaces/    # User interfaces
+│   └── cli/       # Command-line interface
+├── core/          # Core functionality
+│   ├── parser/    # AI command parsing
+│   ├── generator/ # K6 script generation
+│   ├── executor/  # Test execution
+│   └── analyzer/  # Results analysis
+├── types/         # TypeScript definitions
+└── utils/         # Utility functions
 ```
 
 ## 📄 License
@@ -440,33 +633,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-### Getting Help
+For support and questions:
 
-1. Check the [troubleshooting guide](#-monitoring-and-troubleshooting)
-2. Review [deployment documentation](DEPLOYMENT.md)
-3. Search existing issues
-4. Create a new issue with:
-   - System information
-   - Error logs
-   - Steps to reproduce
-
-### Useful Commands
-
-```bash
-# System diagnostics
-./scripts/monitor.sh status
-
-# Collect logs for support
-./scripts/monitor.sh logs /tmp/support-logs
-
-# Create system backup
-./scripts/monitor.sh backup
-
-# Reset to clean state
-docker-compose down -v
-./scripts/deploy.sh
-```
-
----
-
-**Happy Load Testing! 🚀**
+- Check the [FAQ](docs/FAQ.md) for common issues
+- Review [examples](docs/EXAMPLES.md) for usage patterns
+- Consult [troubleshooting guide](docs/TROUBLESHOOTING.md) for solutions
+- Open an issue on GitHub for bugs or feature requests

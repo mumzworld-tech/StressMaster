@@ -113,9 +113,9 @@ Create `config/ai-config.json`:
 ### Programmatic Configuration
 
 ```typescript
-import { UniversalCommandParser } from "./parser/universal-command-parser";
+import { UnifiedCommandParser } from "./core/parser";
 
-const parser = new UniversalCommandParser({
+const parser = new UnifiedCommandParser({
   provider: "openai",
   apiKey: process.env.AI_API_KEY,
   model: "gpt-3.5-turbo",
