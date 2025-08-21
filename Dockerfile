@@ -1,7 +1,7 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache python3 make g++
@@ -23,7 +23,7 @@ COPY tsconfig.json ./
 RUN npm run build
 
 # Dependencies stage - separate stage for production dependencies
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
@@ -34,7 +34,7 @@ COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 # Install runtime dependencies and security tools
 RUN apk add --no-cache \
