@@ -15,6 +15,7 @@ import { PromptBuilder } from "./prompt-builder";
 import {
   cleanJsonResponse,
   attemptJsonFix,
+  generateTestId,
 } from "../../features/common/string-utils";
 import { isValidJson } from "../../features/common/validation-utils";
 
@@ -167,7 +168,7 @@ export class ResponseHandler {
   ): LoadTestSpec {
     // Ensure required fields are present
     if (!spec.id) {
-      spec.id = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      spec.id = generateTestId(spec);
     }
 
     if (!spec.name) {
@@ -534,7 +535,15 @@ export class ResponseHandler {
   ): ParsedResponse {
     // Create a basic spec using template methods when JSON parsing fails
     const spec: LoadTestSpec = {
-      id: `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: generateTestId({
+        testType: PromptBuilder.inferTestType(originalInput),
+        requests: [
+          {
+            method: PromptBuilder.inferHttpMethod(originalInput),
+            url: this.extractUrlFromInput(originalInput) || "/api/endpoint",
+          },
+        ],
+      }),
       name: this.generateTestName(originalInput),
       description: originalInput,
       testType: PromptBuilder.inferTestType(originalInput) as any,
@@ -589,7 +598,10 @@ export class ResponseHandler {
     }
 
     const result: LoadTestSpec = {
-      id: `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: generateTestId({
+        testType: "baseline",
+        requests: [request],
+      }),
       name: this.generateTestName(originalInput),
       description: originalInput,
       testType: "baseline" as const,

@@ -34,12 +34,13 @@ export class InteractiveCLI implements CLIInterface {
   private resultDisplay: ResultDisplayManager;
   private progressSubject = new Subject<ProgressUpdate>();
   private isRunning = false;
+  private lastTestResult: TestResult | null = null;
 
   constructor(config: Partial<CLIConfig> = {}) {
     this.sessionManager = new SessionManager(config);
     this.displayManager = new DisplayManager(this.sessionManager.getHistory());
     this.resultDisplay = new ResultDisplayManager();
-    this.exportManager = new ExportManager(this.resultDisplay);
+    this.exportManager = new ExportManager();
     this.apiEnhancer = new APIEnhancer();
   }
 
@@ -89,7 +90,7 @@ export class InteractiveCLI implements CLIInterface {
         }
 
         if (input.toLowerCase().startsWith("export ")) {
-          await this.exportManager.handleExportCommand(input);
+          await this.handleExportCommand(input.substring(7)); // Remove "export " prefix
           continue;
         }
 
@@ -131,6 +132,10 @@ export class InteractiveCLI implements CLIInterface {
 
       // Add to session history
       this.sessionManager.addTestToHistory(result);
+
+      // Store the last test result for export
+      this.lastTestResult = result;
+      await this.saveLastTestResult(result);
 
       // Display the full results with all visualizations
       this.resultDisplay.displayResults(result);
@@ -176,8 +181,8 @@ export class InteractiveCLI implements CLIInterface {
     try {
       // Import the necessary modules
       const { UnifiedCommandParser } = await import("../../core/parser");
-      const { BasicHttpExecutor } = await import(
-        "../../core/executor/simple-http-executor"
+      const { SmartLoadExecutor } = await import(
+        "../../core/executor/smart-executor"
       );
 
       // Normalize smart quotes and special characters in the input first
@@ -195,9 +200,18 @@ export class InteractiveCLI implements CLIInterface {
         .replace(/[\u00AB\u00BB]/g, '"') // Left-pointing and right-pointing double angle quotes
         .trim();
 
-      // Initialize parser and executor
-      const parser = new UnifiedCommandParser();
-      const executor = new BasicHttpExecutor();
+      // Initialize parser and executor with proper configuration
+      const apiKey = process.env.AI_API_KEY;
+      if (!apiKey) {
+        throw new Error("AI_API_KEY environment variable not set");
+      }
+
+      const parser = new UnifiedCommandParser({
+        aiProvider: "claude", // Force Claude provider
+        modelName: "claude-3-5-sonnet-20241022",
+        apiKey: apiKey,
+      });
+      const executor = new SmartLoadExecutor();
 
       // Parse the command with enhanced visual feedback
       console.log(
@@ -314,10 +328,123 @@ export class InteractiveCLI implements CLIInterface {
     this.resultDisplay.displayResults(results);
   }
 
+  public async handleExportCommand(input: string): Promise<void> {
+    const parts = input.split(" ");
+    if (parts.length < 1) {
+      console.log(
+        chalk.red("❌ Invalid export command. Use: export <format> [options]")
+      );
+      console.log(chalk.gray("   Examples:"));
+      console.log(chalk.gray("   - export json"));
+      console.log(chalk.gray("   - export csv"));
+      console.log(chalk.gray("   - export html"));
+      console.log(chalk.gray("   - export json --include-raw"));
+      return;
+    }
+
+    const format = parts[0] as "json" | "csv" | "html";
+    if (!["json", "csv", "html"].includes(format)) {
+      console.log(
+        chalk.red("❌ Invalid format. Supported formats: json, csv, html")
+      );
+      return;
+    }
+
+    // Try to get the last test result from memory or file
+    let testResult = this.lastTestResult;
+    if (!testResult) {
+      testResult = await this.loadLastTestResult();
+    }
+
+    if (!testResult) {
+      console.log(chalk.yellow("⚠️  No test results available for export."));
+      console.log(
+        chalk.gray("   Run a test first, then use the export command.")
+      );
+      return;
+    }
+
+    const options = {
+      format,
+      includeRawData: input.includes("--include-raw"),
+      includeRecommendations: input.includes("--include-recommendations"),
+    };
+
+    try {
+      const filePath = await this.exportManager.exportTestResult(
+        testResult,
+        options
+      );
+      console.log(chalk.green(`✅ Test results exported to: ${filePath}`));
+
+      // Show export stats
+      const stats = this.exportManager.getExportStats();
+      console.log(
+        chalk.blue(
+          `📊 Export stats: ${stats.totalFiles} files, ${stats.totalSize} total`
+        )
+      );
+    } catch (error) {
+      console.log(chalk.red(`❌ Export failed: ${error}`));
+    }
+  }
+
   async exportResults(
     results: TestResult,
     format: ExportFormat
   ): Promise<void> {
-    await this.exportManager.exportResults(results, format);
+    const options = {
+      format: format as "json" | "csv" | "html",
+      includeRawData: false,
+      includeRecommendations: true,
+    };
+
+    await this.exportManager.exportTestResult(results, options);
+  }
+
+  private async loadLastTestResult(): Promise<TestResult | null> {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+
+      const resultFile = path.join(
+        process.cwd(),
+        "cache",
+        "last-test-result.json"
+      );
+
+      if (fs.existsSync(resultFile)) {
+        const data = fs.readFileSync(resultFile, "utf8");
+        const result = JSON.parse(data);
+
+        // Convert date strings back to Date objects
+        result.startTime = new Date(result.startTime);
+        result.endTime = new Date(result.endTime);
+
+        return result;
+      }
+    } catch (error) {
+      console.warn("⚠️  Could not load last test result:", error);
+    }
+
+    return null;
+  }
+
+  private async saveLastTestResult(result: TestResult): Promise<void> {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+
+      const resultFile = path.join(
+        process.cwd(),
+        "cache",
+        "last-test-result.json"
+      );
+      const data = JSON.stringify(result, null, 2);
+
+      fs.writeFileSync(resultFile, data, "utf8");
+    } catch (error) {
+      console.warn("⚠️  Could not save test result:", error);
+    }
   }
 }

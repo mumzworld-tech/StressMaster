@@ -1,41 +1,110 @@
 #!/usr/bin/env node
 
-// CLI entry point for StressMaster
-import { CLIRunner } from "./interfaces/cli/cli-runner";
-import { validateEnvironment } from "./config";
+// Load environment variables first
+import "dotenv/config";
+import { InteractiveCLI } from "./interfaces/cli/interactive-cli";
+import { CLIConfig } from "./config";
 
 async function main() {
-  // Validate environment configuration before starting
-  const envValidation = validateEnvironment();
+  const config: CLIConfig = {
+    interactive: true,
+    verbose: false,
+    outputFormat: "json",
+    maxHistoryEntries: 100,
+    autoComplete: true,
+  };
 
-  if (!envValidation.valid) {
-    console.error("❌ Environment validation failed:");
-    envValidation.errors.forEach((error) => console.error(`  - ${error}`));
-    process.exit(1);
+  const cli = new InteractiveCLI(config);
+
+  // Check for command line arguments
+  const args = process.argv.slice(2);
+
+  if (args.length > 0) {
+    // Check for help commands
+    if (args[0] === "--help" || args[0] === "-h" || args[0] === "help") {
+      console.log(`
+🚀 StressMaster - AI-Powered Load Testing Tool
+
+USAGE:
+  stressmaster [command]                    # Interactive mode
+  stressmaster "your test description"      # Run a test
+  stressmaster export <format> [options]    # Export results
+
+EXAMPLES:
+  stressmaster "send 10 GET requests to https://httpbin.org/get"
+  stressmaster "spike test with 50 requests in 30 seconds to https://api.example.com"
+  stressmaster "POST 100 requests with JSON payload to https://api.example.com/users"
+  stressmaster export html
+  stressmaster export json --include-raw
+
+LOAD TEST TYPES:
+  • Baseline: Simple constant load
+  • Spike: Sudden traffic spikes
+  • Ramp-up: Gradual load increase
+  • Stress: High load testing
+  • Random Burst: Variable load patterns
+
+EXPORT FORMATS:
+  • json: Raw test data
+  • csv: Spreadsheet format
+  • html: Beautiful reports with charts
+
+OPTIONS:
+  --help, -h     Show this help message
+  --version, -v  Show version
+
+ALIASES:
+  sm             Short alias for stressmaster
+
+For more examples, visit: https://github.com/your-repo/stressmaster
+      `);
+      process.exit(0);
+    }
+
+    // Check for version command
+    if (args[0] === "--version" || args[0] === "-v") {
+      console.log("StressMaster v1.0.2");
+      process.exit(0);
+    }
+
+    // Check if this is an export command
+    if (args[0] === "export" && args.length >= 2) {
+      try {
+        await cli.handleExportCommand(args.slice(1).join(" "));
+        process.exit(0);
+      } catch (error) {
+        console.error(`❌ Export failed: ${error}`);
+        process.exit(1);
+      }
+    }
+
+    // Non-interactive mode with command line arguments
+    const command = args.join(" ");
+    console.log(`🚀 Running command: ${command}`);
+
+    try {
+      const result = await cli.processCommand(command);
+      cli.displayResults(result);
+
+      // Show export options after successful test
+      console.log("\n📤 Export Options:");
+      console.log("   stressmaster export json");
+      console.log("   stressmaster export csv");
+      console.log("   stressmaster export html");
+      console.log("   stressmaster export json --include-raw");
+      console.log("   stressmaster export html --include-recommendations");
+      console.log("   sm export html  # (short alias)");
+    } catch (error) {
+      console.error(`❌ Command failed: ${error}`);
+      process.exit(1);
+    }
+  } else {
+    // Interactive mode
+    await cli.startSession();
   }
-
-  if (envValidation.warnings.length > 0) {
-    console.warn("⚠️  Environment warnings:");
-    envValidation.warnings.forEach((warning) => console.warn(`  - ${warning}`));
-  }
-
-  const cli = new CLIRunner();
-  await cli.run();
 }
 
-// Handle unhandled promise rejections
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
-  process.exit(1);
-});
-
-// Handle uncaught exceptions
-process.on("uncaughtException", (error) => {
-  console.error("Uncaught Exception:", error);
-  process.exit(1);
-});
-
 main().catch((error) => {
-  console.error("CLI Error:", error);
+  console.error("❌ Fatal error:", error);
   process.exit(1);
 });

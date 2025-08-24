@@ -170,4 +170,131 @@ Thumbs.db
 
 # Test files
 test-field-extraction.js
-bypass-ai-test.js 
+bypass-ai-test.js
+
+# ============================================================================
+# StressMaster Specific Generated Files
+# ============================================================================
+
+# Export files and reports
+exports/
+*.json
+*.csv
+*.html
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.test.json
+!vitest.config.ts
+!vitest.integration.config.ts
+!vitest.unit.config.ts
+!config/ai-config.example.json
+!config/ai-config.json
+
+# Generated JSON files
+load-test-*.json
+test-export-*.json
+stressmaster-*.json
+*-test-*.json
+
+# Cache directories
+cache/
+parse-cache.json
+ai-cache.json
+
+# K6 scripts and results
+k6-scripts/
+*.k6.js
+*.k6.results.json
+k6-results/
+
+# Test payloads and data files
+test-payload.json
+test-data/
+sample-data/
+bulk-data/
+
+# Session and history files
+sessions/
+history/
+*.session.json
+*.history.json
+
+# Backup files
+backups/
+*.backup
+*.bak
+
+# Temporary test files
+temp-tests/
+test-output/
+*.tmp
+
+# AI provider specific files
+ai-config.local.json
+providers/
+models/
+
+# Performance and monitoring data
+metrics/
+performance-data/
+monitoring/
+
+# Docker and deployment
+docker-compose.override.yml
+docker-compose.local.yml
+.dockerignore
+
+# Development and testing artifacts
+test-results/
+coverage-reports/
+*.test.log
+*.debug.log
+
+# IDE and editor specific
+.vscode/settings.json
+.vscode/launch.json
+.idea/workspace.xml
+*.sublime-project
+*.sublime-workspace
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs and debugging
+debug/
+*.debug
+*.trace
+*.profile
+
+# Security and secrets
+secrets/
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Large files and archives
+*.tar.gz
+*.zip
+*.rar
+*.7z
+*.bz2
+
+# Node.js specific
+.npmrc
+.yarnrc
+.yarnrc.yml 

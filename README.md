@@ -40,6 +40,23 @@ A local-first AI-powered load testing tool that accepts natural language command
 
 ### 1. Installation
 
+#### Option A: Global Installation (Recommended)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd stressmaster
+
+# Install globally
+./install.sh
+
+# Or manually:
+npm run build
+npm install -g .
+```
+
+#### Option B: Docker Installation
+
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -52,16 +69,25 @@ cp .env.example .env
 ./scripts/deploy.sh
 ```
 
-The deployment process will:
-
-- Build Docker images
-- Download the LLaMA3 model
-- Start all services
-- Verify the installation
-
 ### 2. First Load Test
 
-Once deployed, you can start using the tool:
+#### Using Global Installation:
+
+```bash
+# Interactive mode
+stressmaster
+
+# Direct command
+stressmaster "send 10 GET requests to https://httpbin.org/get"
+
+# Spike test
+stressmaster "spike test with 50 requests in 30 seconds to https://api.example.com"
+
+# Export results
+stressmaster export html
+```
+
+#### Using Docker Installation:
 
 ```bash
 # Access the interactive CLI
@@ -73,6 +99,74 @@ Try your first load test:
 ```
 Send 100 GET requests to https://httpbin.org/get over 30 seconds
 ```
+
+## 💻 CLI Usage
+
+StressMaster provides a powerful command-line interface with natural language processing:
+
+### Basic Commands
+
+```bash
+# Show help
+stressmaster --help
+sm --help
+
+# Show version
+stressmaster --version
+sm --version
+
+# Interactive mode
+stressmaster
+
+# Run a test directly
+stressmaster "send 10 GET requests to https://httpbin.org/get"
+
+# Export results
+stressmaster export html
+sm export json --include-raw
+```
+
+### Command Examples
+
+```bash
+# Basic GET test
+stressmaster "send 5 GET requests to https://httpbin.org/get"
+
+# POST with JSON payload
+stressmaster "POST 20 requests with JSON payload to https://api.example.com/users"
+
+# Spike test
+stressmaster "spike test with 100 requests in 60 seconds to https://api.example.com"
+
+# Ramp-up test
+stressmaster "ramp up from 10 to 100 requests over 2 minutes to https://api.example.com"
+
+# Stress test
+stressmaster "stress test with 500 requests to https://api.example.com"
+
+# Random burst test
+stressmaster "random burst test with 50 requests to https://api.example.com"
+```
+
+### Export Options
+
+```bash
+# Export to different formats
+stressmaster export json
+stressmaster export csv
+stressmaster export html
+
+# Include raw data
+stressmaster export json --include-raw
+
+# Include recommendations
+stressmaster export html --include-recommendations
+```
+
+### Aliases
+
+- `stressmaster` - Full command name
+- `sm` - Short alias for quick commands
 
 ## 🤖 AI Model Setup
 

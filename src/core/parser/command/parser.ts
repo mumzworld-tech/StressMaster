@@ -12,12 +12,18 @@ import { FallbackParser } from "../fallback";
 import { FallbackParseResult } from "../types";
 import { ParserUtils } from "../utils";
 import { selectPromptTemplate } from "../prompts/command-parser-prompt";
+import { generateTestId } from "../../../features/common/string-utils";
 import {
   CommandParser,
   ParserConfig,
   ParseResult,
   ParserMetrics,
 } from "./interfaces";
+
+// Add rate limiting and caching imports
+import { RateLimiter } from "../rate-limiter";
+import { ParseCache } from "../parse-cache";
+import * as path from "path";
 
 export class UnifiedCommandParser implements CommandParser {
   private aiProvider!: AIProvider;
@@ -26,6 +32,8 @@ export class UnifiedCommandParser implements CommandParser {
   private responseHandler: ResponseHandler;
   private config: ParserConfig;
   private isReady: boolean = false;
+  private rateLimiter: RateLimiter;
+  private parseCache: ParseCache;
 
   constructor(config: ParserConfig = {}) {
     this.config = {
@@ -39,6 +47,20 @@ export class UnifiedCommandParser implements CommandParser {
     this.fallbackParser = new FallbackParser();
     this.promptBuilder = new PromptBuilder();
     this.responseHandler = new ResponseHandler();
+
+    // Initialize rate limiting and caching
+    this.rateLimiter = new RateLimiter({
+      maxRequestsPerMinute: 60, // Limit AI calls
+      maxRequestsPerHour: 1000,
+      burstSize: 10,
+    });
+
+    this.parseCache = new ParseCache({
+      maxSize: 1000,
+      ttlMinutes: 60,
+      persistent: true, // Enable persistent storage
+      cacheFile: path.join(process.cwd(), "cache", "parse-cache.json"),
+    });
   }
 
   async initialize(): Promise<void> {
@@ -60,20 +82,23 @@ export class UnifiedCommandParser implements CommandParser {
         );
       }
 
+      // Prioritize constructor config over file config
       const aiConfig: AIConfig = {
-        provider: aiConfigFromFile.provider || this.config.aiProvider!,
+        provider:
+          this.config.aiProvider || aiConfigFromFile.provider || "ollama",
         model:
+          this.config.modelName ||
           aiConfigFromFile.ollama?.model ||
           aiConfigFromFile.model ||
-          this.config.modelName!,
-        apiKey: aiConfigFromFile.apiKey || this.config.apiKey,
+          "llama3.2:1b",
+        apiKey: this.config.apiKey || aiConfigFromFile.apiKey,
         endpoint:
+          this.config.ollamaEndpoint ||
           aiConfigFromFile.ollama?.endpoint ||
           aiConfigFromFile.endpoint ||
-          this.config.ollamaEndpoint ||
           "http://localhost:11434",
-        maxRetries: aiConfigFromFile.maxRetries || this.config.maxRetries!,
-        timeout: aiConfigFromFile.timeout || this.config.timeout!,
+        maxRetries: this.config.maxRetries || aiConfigFromFile.maxRetries || 3,
+        timeout: this.config.timeout || aiConfigFromFile.timeout || 30000,
         options: aiConfigFromFile.options || {},
       };
 
@@ -87,6 +112,50 @@ export class UnifiedCommandParser implements CommandParser {
   }
 
   async parseCommand(input: string): Promise<LoadTestSpec> {
+    // Check cache first with smart semantic matching
+    const cacheKey = this.generateCacheKey(input);
+    let cachedResult = this.parseCache.get(cacheKey);
+
+    // If no direct match, try variant cache keys
+    if (!cachedResult) {
+      const variantKeys = this.generateVariantCacheKey(input);
+      for (const variantKey of variantKeys) {
+        cachedResult = this.parseCache.get(variantKey);
+        if (cachedResult) {
+          console.log("📋 Using cached parse result (semantic match)");
+          console.log(`🔍 Matched variant key: ${variantKey}`);
+          console.log(`📊 Cache size: ${this.parseCache.size()}`);
+
+          // Adapt cached result to current command parameters
+          const adaptedResult = this.adaptCachedResult(cachedResult, input);
+          return adaptedResult;
+        }
+      }
+    } else {
+      console.log("📋 Using cached parse result (exact match)");
+      console.log(`🔍 Cache key: ${cacheKey}`);
+      console.log(`📊 Cache size: ${this.parseCache.size()}`);
+
+      // Adapt cached result to current command parameters
+      const adaptedResult = this.adaptCachedResult(cachedResult, input);
+      return adaptedResult;
+    }
+
+    console.log("🔄 Cache miss, making AI call");
+    console.log(`🔍 Cache key: ${cacheKey}`);
+    console.log(
+      `🔍 Normalized: ${this.normalizeCommand(input.toLowerCase().trim())}`
+    );
+
+    const usedCacheKey = cacheKey;
+
+    // Check rate limits
+    if (!this.rateLimiter.canMakeRequest()) {
+      console.log("⚠️ Rate limit reached, using fallback parser");
+      const fallbackResult = await this.fallbackParser.parseCommand(input);
+      return fallbackResult.spec;
+    }
+
     const startTime = Date.now();
     const metrics: ParserMetrics = {
       parseTime: 0,
@@ -106,15 +175,10 @@ export class UnifiedCommandParser implements CommandParser {
 
           // Validate AI result quality
           const isAIResultValid = this.validateAIResult(aiResult.spec, input);
-          console.log(
-            "🔍 AI Result validation:",
-            isAIResultValid,
-            "Confidence:",
-            aiResult.confidence
-          );
+          // Silent validation - only show if there's an issue
 
-          // Use AI result if confidence is good enough AND result is valid
-          if (aiResult.confidence > 0.1 && isAIResultValid) {
+          // Use AI result if it's valid (Claude is very capable, so we trust it more)
+          if (isAIResultValid) {
             console.log("✅ AI parsing successful!");
             metrics.confidenceScore = aiResult.confidence;
             metrics.parseTime = Date.now() - startTime;
@@ -125,22 +189,34 @@ export class UnifiedCommandParser implements CommandParser {
                 aiResult.spec,
                 input
               );
+
+              // Cache the successful result
+              this.parseCache.set(usedCacheKey, enhancedSpec);
+
               return enhancedSpec;
             } catch (enhanceError) {
               metrics.errorCount++;
               console.warn(`AI enhancement failed: ${enhanceError}`);
-              // Fall back to fallback parser
-              metrics.fallbackUsed = true;
-              const fallbackResult = await this.fallbackParser.parseCommand(
-                input
-              );
-              metrics.confidenceScore = fallbackResult.confidence;
-              metrics.parseTime = Date.now() - startTime;
-              return fallbackResult.spec;
+              // Only fall back for major enhancement failures
+              if (this.config.aiProvider === "claude") {
+                console.log(
+                  "🔄 Claude enhancement failed, but result is still usable"
+                );
+                return aiResult.spec; // Return the original AI result
+              } else {
+                // For other providers, use fallback
+                metrics.fallbackUsed = true;
+                const fallbackResult = await this.fallbackParser.parseCommand(
+                  input
+                );
+                metrics.confidenceScore = fallbackResult.confidence;
+                metrics.parseTime = Date.now() - startTime;
+                return fallbackResult.spec;
+              }
             }
           } else {
             console.warn(
-              `AI result invalid or confidence too low (${aiResult.confidence}), trying fallback`
+              `AI result invalid (${aiResult.confidence}), trying fallback`
             );
           }
         } catch (error) {
@@ -181,105 +257,238 @@ export class UnifiedCommandParser implements CommandParser {
 
   private async parseWithAI(input: string): Promise<ParseResult> {
     try {
-      // Build the prompt for AI parsing using intelligent template selection
-      const prompt = selectPromptTemplate(input);
+      let response;
 
-      // If no prompt is returned, it means we should use fallback for complex commands
-      if (!prompt) {
-        console.log("🔄 Complex command detected - using fallback parser");
-        throw new Error("Use fallback parser");
+      // For Claude, we trust it to handle complex commands and file references
+      if (this.config.aiProvider === "claude") {
+        // Use the full prompt builder for Claude
+        const prompt = PromptBuilder.buildFullPrompt(input);
+
+        // Get AI response
+        response = await this.aiProvider.generateCompletion({
+          prompt: input,
+          systemPrompt: prompt,
+          model: this.config.modelName,
+          maxTokens: 2000,
+          temperature: 0.1,
+          format: "json",
+        });
+      } else {
+        // For other providers, use the original logic
+        // Check if command contains file references - use fallback parser for these
+        if (input.includes("@") && input.includes(".json")) {
+          console.log("🔄 File reference detected - using fallback parser");
+          throw new Error("Use fallback parser for file references");
+        }
+
+        // Build the prompt for AI parsing using intelligent template selection
+        const prompt = selectPromptTemplate(input);
+
+        // If no prompt is returned, it means we should use fallback for complex commands
+        if (!prompt) {
+          console.log("🔄 Complex command detected - using fallback parser");
+          throw new Error("Use fallback parser");
+        }
+
+        // Get AI response
+        response = await this.aiProvider.generateCompletion({
+          prompt,
+          format: "json",
+          temperature: 0.01, // Very low temperature for consistent parsing
+          maxTokens: 4000, // Increase max tokens for complex JSON
+        });
       }
-
-      // Get AI response
-      const response = await this.aiProvider.generateCompletion({
-        prompt,
-        format: "json",
-        temperature: 0.01, // Very low temperature for consistent parsing
-        maxTokens: 4000, // Increase max tokens for complex JSON
-      });
 
       // Parse the response
       try {
         const parsedJson = JSON.parse(response.response);
 
-        console.log("🔍 Raw AI Response:", response.response);
-        console.log(
-          "🔍 Parsed AI Response:",
-          JSON.stringify(parsedJson, null, 2)
-        );
+        // Only show detailed AI response in development mode
+        if (process.env.NODE_ENV === "development") {
+          // Silent raw response - no need to show technical details
+          console.log(
+            "🔍 Parsed AI Response:",
+            JSON.stringify(parsedJson, null, 2)
+          );
+        }
 
         // Validate the AI response structure
         if (!this.isValidAIResponse(parsedJson)) {
           throw new Error("AI response has invalid structure");
         }
 
-        // Convert the new format to LoadTestSpec
-        const spec: LoadTestSpec = {
-          id: `ai_${Date.now()}`,
-          name: "AI Generated Test",
-          description: "Generated from natural language command",
-          testType: "baseline",
-          requests: [
-            {
-              method: parsedJson.method,
-              url: parsedJson.url,
-              headers: parsedJson.headers || {},
-              body: this.cleanAIBody(parsedJson.body) || undefined,
+        // Convert the AI response to LoadTestSpec
+        let spec: LoadTestSpec;
+
+        // Check if AI returned LoadTestSpec format directly
+        if (parsedJson.requests && Array.isArray(parsedJson.requests)) {
+          // AI returned LoadTestSpec format - use it directly with some defaults
+          spec = {
+            id: parsedJson.id || `ai_${Date.now()}`,
+            name: parsedJson.name || "AI Generated Test",
+            description:
+              parsedJson.description ||
+              "Generated from natural language command",
+            testType: parsedJson.testType || "baseline",
+            requests: parsedJson.requests,
+            loadPattern: parsedJson.loadPattern || {
+              type: "constant",
+              virtualUsers: 1,
             },
-          ],
-          loadPattern: {
-            type: parsedJson.loadPattern?.type || "constant",
-            virtualUsers:
-              parsedJson.requestCount ||
-              parsedJson.loadPattern?.virtualUsers ||
-              1,
-          },
-          duration: parsedJson.duration || { value: 60, unit: "seconds" },
-        };
+            duration: parsedJson.duration || { value: 60, unit: "seconds" },
+          };
+        } else {
+          // AI returned old format - convert to LoadTestSpec
+          spec = {
+            id: `ai_${Date.now()}`,
+            name: "AI Generated Test",
+            description: "Generated from natural language command",
+            testType: "baseline",
+            requests: [
+              {
+                method: parsedJson.method,
+                url: parsedJson.url,
+                headers: parsedJson.headers || {},
+                body: this.cleanAIBody(parsedJson.body) || undefined,
+              },
+            ],
+            loadPattern: {
+              type: parsedJson.loadPattern?.type || "constant",
+              virtualUsers:
+                parsedJson.requestCount ||
+                parsedJson.loadPattern?.virtualUsers ||
+                1,
+            },
+            duration: parsedJson.duration || { value: 60, unit: "seconds" },
+          };
+        }
 
         // Add incrementing support if mentioned in the command
         if (input.toLowerCase().includes("increment")) {
           const incrementFields = this.extractIncrementFields(input);
           if (incrementFields.length > 0) {
-            console.log(
-              "🔧 AI Parser: Creating payload template for incrementing fields:",
-              incrementFields
-            );
-
-            // Create a clean template without the extra increment fields
-            const cleanBody = { ...spec.requests[0].body };
-
-            // Remove any extra increment fields that might have been added
-            delete cleanBody.incrementRequestId;
-            delete cleanBody.incrementExternalId;
-            delete cleanBody.increment;
-
-            // Create template with variable placeholders
-            const templateBody = { ...cleanBody };
-            incrementFields.forEach((field) => {
-              this.replaceFieldWithVariable(
-                templateBody,
-                field,
-                `{{${field}}}`
+            // Only show debug info in development mode
+            if (process.env.NODE_ENV === "development") {
+              console.log(
+                "🔧 AI Parser: Creating payload template for incrementing fields:",
+                incrementFields
               );
-            });
+            }
 
-            spec.requests[0].payload = {
-              template: JSON.stringify(templateBody),
-              variables: incrementFields.map((field) => ({
-                name: field,
-                type: "incremental",
-                parameters: {
-                  baseValue: this.findFieldValue(cleanBody, field) || "1",
-                },
-              })),
-            };
-            delete spec.requests[0].body;
+            // Check if AI already created a proper payload template
+            if (spec.requests[0].payload && spec.requests[0].payload.template) {
+              if (process.env.NODE_ENV === "development") {
+                console.log("🔧 AI Parser: Preserving AI's payload template");
+              }
+              // AI already created the template, preserve its variables
+              if (spec.requests[0].payload.variables) {
+                if (process.env.NODE_ENV === "development") {
+                  console.log(
+                    "🔧 AI Parser: AI provided variables:",
+                    spec.requests[0].payload.variables
+                  );
+                }
 
-            console.log(
-              "🔧 AI Parser: Created payload template:",
-              spec.requests[0].payload
-            );
+                // Fix variable structure to match executor expectations
+                spec.requests[0].payload.variables =
+                  spec.requests[0].payload.variables.map((variable: any) => {
+                    // If variable has startValue directly, move it to parameters
+                    if (variable.startValue && !variable.parameters) {
+                      // For requestId, create a proper base value
+                      let startValue = variable.startValue;
+                      if (variable.name === "requestId" && startValue === "1") {
+                        startValue = "burst-test-1";
+                      }
+                      return {
+                        name: variable.name,
+                        type: variable.type,
+                        parameters: {
+                          startValue: startValue,
+                          ...(variable.prefix && { prefix: variable.prefix }),
+                        },
+                      };
+                    }
+                    return variable;
+                  });
+
+                // Replace static values in the template with placeholders
+                if (spec.requests[0].payload.template) {
+                  let template = spec.requests[0].payload.template;
+                  spec.requests[0].payload.variables.forEach(
+                    (variable: any) => {
+                      // Replace the static value with a placeholder
+                      if (variable.name === "requestId") {
+                        // Find and replace the requestId value in the JSON
+                        template = template.replace(
+                          /"requestId":\s*"[^"]*"/g,
+                          `"requestId": "{{${variable.name}}}"`
+                        );
+                      }
+                    }
+                  );
+                  spec.requests[0].payload.template = template;
+                }
+
+                if (process.env.NODE_ENV === "development") {
+                  console.log(
+                    "🔧 AI Parser: Fixed variables structure:",
+                    spec.requests[0].payload.variables
+                  );
+                }
+              } else {
+                // Only create variables if AI didn't provide them
+                spec.requests[0].payload.variables = incrementFields.map(
+                  (field) => ({
+                    name: field,
+                    type: "incremental",
+                    parameters: {
+                      baseValue:
+                        this.findFieldValue(
+                          spec.requests[0].body || {},
+                          field
+                        ) || "1",
+                    },
+                  })
+                );
+              }
+            } else {
+              // Create a clean template without the extra increment fields
+              const cleanBody = { ...spec.requests[0].body };
+
+              // Remove any extra increment fields that might have been added
+              delete cleanBody.incrementRequestId;
+              delete cleanBody.incrementExternalId;
+              delete cleanBody.increment;
+
+              // Create template with variable placeholders
+              const templateBody = { ...cleanBody };
+              incrementFields.forEach((field) => {
+                this.replaceFieldWithVariable(
+                  templateBody,
+                  field,
+                  `{{${field}}}`
+                );
+              });
+
+              spec.requests[0].payload = {
+                template: JSON.stringify(templateBody),
+                variables: incrementFields.map((field) => ({
+                  name: field,
+                  type: "incremental",
+                  parameters: {
+                    baseValue: this.findFieldValue(cleanBody, field) || "1",
+                  },
+                })),
+              };
+              delete spec.requests[0].body;
+            }
+
+            if (process.env.NODE_ENV === "development") {
+              console.log(
+                "🔧 AI Parser: Final payload template:",
+                spec.requests[0].payload
+              );
+            }
           }
         }
 
@@ -298,7 +507,31 @@ export class UnifiedCommandParser implements CommandParser {
   }
 
   private isValidAIResponse(response: any): boolean {
-    // Check if it has the required fields for the new format
+    // Check if it has the LoadTestSpec format (new format)
+    if (
+      response.requests &&
+      Array.isArray(response.requests) &&
+      response.requests.length > 0
+    ) {
+      const firstRequest = response.requests[0];
+      if (firstRequest.method && firstRequest.url) {
+        // Check for valid HTTP method
+        const validMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+        if (!validMethods.includes(firstRequest.method.toUpperCase())) {
+          return false;
+        }
+
+        // Check for valid URL format
+        try {
+          new URL(firstRequest.url);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+    }
+
+    // Check if it has the old format (direct method and url)
     if (response.method && response.url) {
       // Check for valid HTTP method
       const validMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
@@ -405,7 +638,7 @@ export class UnifiedCommandParser implements CommandParser {
   }
 
   private validateAIResult(spec: LoadTestSpec, input: string): boolean {
-    console.log("🔍 Validating AI result:", JSON.stringify(spec, null, 2));
+    // Silent validation details - no need to show technical details
 
     // Dynamic validation: accept any valid structure
     if (!spec || typeof spec !== "object") {
@@ -458,13 +691,14 @@ export class UnifiedCommandParser implements CommandParser {
       return false;
     }
 
-    // Dynamic body/payload validation - accept either body or payload
+    // Dynamic body/payload validation - GET requests don't need body/payload
+    const isGetRequest = firstRequest.method.toUpperCase() === "GET";
     const hasBody = firstRequest.body !== undefined;
     const hasPayload =
       firstRequest.payload && typeof firstRequest.payload === "object";
 
-    if (!hasBody && !hasPayload) {
-      console.log("❌ Failed: No body or payload");
+    if (!isGetRequest && !hasBody && !hasPayload) {
+      console.log("❌ Failed: No body or payload for non-GET request");
       return false;
     }
 
@@ -474,7 +708,7 @@ export class UnifiedCommandParser implements CommandParser {
       return false;
     }
 
-    console.log("✅ AI result validation passed");
+    // Silent validation success - no need to show technical details
     return true;
   }
 
@@ -625,5 +859,185 @@ export class UnifiedCommandParser implements CommandParser {
       errorCount: 0,
       warningCount: 0,
     };
+  }
+
+  private generateCacheKey(input: string): string {
+    // Smart semantic cache key generation
+    // Normalize similar commands to use the same cache entry
+
+    const normalized = this.normalizeCommand(input.toLowerCase().trim());
+
+    // Extract HTTP method for cache key differentiation
+    const httpMethod = this.extractHttpMethod(input);
+
+    // Simple hash function for the normalized command
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i++) {
+      hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    // Include HTTP method in cache key to prevent collisions
+    return `cmd:${httpMethod}:${hash}`;
+  }
+
+  private normalizeCommand(input: string): string {
+    // Normalize command for better cache hits
+    let normalized = input;
+
+    // Normalize common patterns
+    const patterns = [
+      // Normalize numbers (but keep the pattern)
+      { regex: /\b\d+\b/g, replacement: "NUM" },
+
+      // Normalize URLs to domain only (keep path structure)
+      {
+        regex: /https?:\/\/([^\/\s]+)(\/[^\s]*)?/g,
+        replacement: "PROTOCOL://DOMAIN$2",
+      },
+
+      // Normalize common variations
+      { regex: /\b(get|GET)\b/g, replacement: "GET" },
+      { regex: /\b(post|POST)\b/g, replacement: "POST" },
+      { regex: /\b(put|PUT)\b/g, replacement: "PUT" },
+      { regex: /\b(delete|DELETE)\b/g, replacement: "DELETE" },
+
+      // Normalize request/requests
+      { regex: /\b(request|requests)\b/g, replacement: "requests" },
+
+      // Normalize send/make variations
+      { regex: /\b(send|make|execute|run)\b/g, replacement: "send" },
+
+      // Normalize time units
+      { regex: /\b(second|seconds|sec|s)\b/g, replacement: "seconds" },
+      { regex: /\b(minute|minutes|min|m)\b/g, replacement: "minutes" },
+
+      // Normalize spacing and punctuation
+      { regex: /\s+/g, replacement: " " },
+      { regex: /[,;.!?]/g, replacement: "" },
+    ];
+
+    patterns.forEach((pattern) => {
+      normalized = normalized.replace(pattern.regex, pattern.replacement);
+    });
+
+    return normalized.trim();
+  }
+
+  private generateVariantCacheKey(input: string): string[] {
+    // Generate multiple cache keys for different variations
+    const baseNormalized = this.normalizeCommand(input.toLowerCase().trim());
+    const variants = [baseNormalized];
+
+    // Add variants for common patterns
+    const commonVariants = [
+      // Remove specific numbers but keep structure
+      baseNormalized.replace(/NUM/g, "X"),
+
+      // Remove protocol/domain specifics
+      baseNormalized.replace(/PROTOCOL:\/\/DOMAIN/g, "URL"),
+
+      // Ultra-generic version (method + endpoint pattern)
+      this.extractCommandPattern(baseNormalized),
+    ];
+
+    variants.push(...commonVariants.filter((v) => v !== baseNormalized));
+
+    // Generate hashes for all variants
+    return variants.map((variant) => {
+      let hash = 0;
+      for (let i = 0; i < variant.length; i++) {
+        hash = variant.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return `cmd:${hash}`;
+    });
+  }
+
+  private extractCommandPattern(normalized: string): string {
+    // Extract the essential pattern: METHOD + endpoint structure
+    const patterns = [
+      // "send NUM GET requests to URL" → "send GET requests to URL"
+      /send\s+NUM\s+(GET|POST|PUT|DELETE)\s+requests\s+to\s+URL/,
+      // "NUM GET requests to URL" → "GET requests to URL"
+      /NUM\s+(GET|POST|PUT|DELETE)\s+requests\s+to\s+URL/,
+      // Generic fallback
+      /(GET|POST|PUT|DELETE)\s+requests/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = normalized.match(pattern);
+      if (match) {
+        return match[0];
+      }
+    }
+
+    return normalized;
+  }
+
+  private adaptCachedResult(
+    cachedResult: LoadTestSpec,
+    input: string
+  ): LoadTestSpec {
+    // Adapt cached result to current command parameters
+    const newSpec = JSON.parse(JSON.stringify(cachedResult)); // Deep clone
+
+    // Extract request count from current input
+    const requestCount = this.extractRequestCount(input);
+    if (requestCount !== null) {
+      // Update virtual users to match request count
+      if (newSpec.loadPattern) {
+        newSpec.loadPattern.virtualUsers = requestCount;
+      }
+    }
+
+    // Generate new ID for this adapted result
+    newSpec.id = generateTestId(newSpec);
+
+    console.log(
+      `🔧 Adapted cache result: ${cachedResult.loadPattern?.virtualUsers} → ${newSpec.loadPattern?.virtualUsers} requests`
+    );
+
+    return newSpec;
+  }
+
+  private extractHttpMethod(input: string): string {
+    // Extract HTTP method from command
+    const methods = [
+      "GET",
+      "POST",
+      "PUT",
+      "DELETE",
+      "PATCH",
+      "HEAD",
+      "OPTIONS",
+    ];
+
+    for (const method of methods) {
+      if (input.toUpperCase().includes(method)) {
+        return method;
+      }
+    }
+
+    // Default to GET if no method specified
+    return "GET";
+  }
+
+  private extractRequestCount(input: string): number | null {
+    // Extract number from patterns like "send 7 requests", "make 10 GET requests"
+    const patterns = [
+      /(\d+)\s+(requests|request)/i,
+      /send\s+(\d+)/i,
+      /make\s+(\d+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = input.match(pattern);
+      if (match) {
+        const count = parseInt(match[1], 10);
+        if (!isNaN(count) && count > 0) {
+          return count;
+        }
+      }
+    }
+    return null;
   }
 }

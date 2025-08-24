@@ -45,6 +45,15 @@ export interface LoadPattern {
   // Volume testing specific
   volumeTarget?: number;
 
+  // Random burst testing specific
+  burstConfig?: {
+    minBurstSize: number;
+    maxBurstSize: number;
+    minIntervalSeconds: number;
+    maxIntervalSeconds: number;
+    burstProbability: number; // 0-1, probability of burst occurring
+  };
+
   // K6 stages for complex patterns
   stages?: Array<{
     duration: string;

@@ -1,6 +1,7 @@
 import axios, { AxiosResponse } from "axios";
 import { LoadTestSpec, TestResult, PerformanceMetrics } from "../../types";
 import chalk from "chalk";
+import { generateTestId } from "../../features/common/string-utils";
 
 export interface SimpleHttpExecutor {
   executeLoadTest(spec: LoadTestSpec): Promise<TestResult>;
@@ -25,7 +26,43 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
       chalk.blue.bold(`\n🚀 Executing ${requestCount} requests to ${url}\n`)
     );
 
-    // Execute requests sequentially for simplicity
+    // Calculate delay between requests
+    const durationMs = this.getDurationInMs(spec.duration);
+
+    // If duration is very short (like 1 minute) and no specific timing mentioned,
+    // execute requests more quickly for better user experience
+    const isQuickTest = durationMs <= 60000 && requestCount <= 50;
+    const delayBetweenRequests = isQuickTest
+      ? 100 // Small delay to avoid overwhelming the target
+      : requestCount > 1
+      ? durationMs / (requestCount - 1)
+      : 0;
+
+    if (isQuickTest) {
+      console.log(
+        chalk.gray(
+          `⚡ Quick test mode: ${requestCount} requests with minimal delays`
+        )
+      );
+    } else {
+      console.log(
+        chalk.gray(
+          `⏱️  Spreading ${requestCount} requests over ${this.formatDuration(
+            spec.duration
+          )}`
+        )
+      );
+    }
+
+    if (delayBetweenRequests > 0) {
+      console.log(
+        chalk.gray(
+          `⏰ Delay between requests: ${Math.round(delayBetweenRequests)}ms`
+        )
+      );
+    }
+
+    // Execute requests with pacing
     for (let i = 0; i < requestCount; i++) {
       try {
         const requestStart = Date.now();
@@ -47,8 +84,8 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
         // Normalize URL to ensure it has a protocol
         const normalizedUrl = this.normalizeUrl(request.url);
 
-        // Make HTTP request
-        const response: AxiosResponse = await axios({
+        // Make HTTP request with retry logic for 5xx errors
+        const response: AxiosResponse = await this.makeRequestWithRetry({
           method: request.method.toLowerCase() as any,
           url: normalizedUrl,
           data: requestData,
@@ -78,6 +115,11 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
             `${response.status} (${responseTime}ms)`
           )} ${statusEmoji}`
         );
+
+        // Add delay between requests (except for the last one)
+        if (i < requestCount - 1 && delayBetweenRequests > 0) {
+          await this.sleep(delayBetweenRequests);
+        }
       } catch (error) {
         const responseTime = Date.now() - Date.now();
         results.push({
@@ -97,7 +139,7 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
     const metrics = this.calculateMetrics(results);
 
     return {
-      id: `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: generateTestId(spec),
       spec,
       startTime,
       endTime,
@@ -181,6 +223,25 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
     try {
       let body = payload.template;
 
+      // Handle file references (e.g., @filename.json)
+      if (typeof body === "string" && body.startsWith("@")) {
+        const filePath = body.substring(1); // Remove @ prefix
+        const fs = require("fs");
+        const path = require("path");
+
+        try {
+          const fullPath = path.resolve(process.cwd(), filePath);
+          body = fs.readFileSync(fullPath, "utf8");
+          console.log(`📁 Loaded file: ${filePath}`);
+        } catch (fileError) {
+          console.warn(
+            `⚠️ Failed to load file ${filePath}:`,
+            (fileError as Error).message
+          );
+          return {};
+        }
+      }
+
       // Normalize smart quotes in the template first
       body = body
         .replace(/["""]/g, '"') // Handle all types of smart quotes
@@ -207,7 +268,23 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
             .replace(/–/g, "-") // Handle en dash
             .replace(/—/g, "-") // Handle em dash
             .trim();
+
+          // Replace placeholder if it exists
           body = body.replace(`{{${variable.name}}}`, normalizedValue);
+
+          // Also replace static values in the JSON for common fields
+          if (variable.name === "requestId") {
+            body = body.replace(
+              /"requestId":\s*"[^"]*"/g,
+              `"requestId": "${normalizedValue}"`
+            );
+          }
+          if (variable.name === "externalId") {
+            body = body.replace(
+              /"externalId":\s*"[^"]*"/g,
+              `"externalId": "${normalizedValue}"`
+            );
+          }
         });
       }
 
@@ -292,24 +369,49 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
     variableName?: string,
     requestIndex?: number
   ): string {
-    // For incremental types, prioritize baseValue over literalValue
-    if (
-      type === "incremental" &&
-      parameters?.baseValue &&
-      requestIndex !== undefined
-    ) {
-      const baseValue = parameters.baseValue.toString();
-      // Extract base and number parts (e.g., "ai-body-req10" -> "ai-body-req" + "10")
-      const match = baseValue.match(/^(.+?)(\d+)$/);
-      if (match) {
-        const prefix = match[1];
-        const startNum = parseInt(match[2]);
-        const result = `${prefix}${startNum + requestIndex}`;
+    // For incremental types, check multiple parameter formats
+    if (type === "incremental" && requestIndex !== undefined) {
+      // Check for baseValue (standard format)
+      if (parameters?.baseValue) {
+        const baseValue = parameters.baseValue.toString();
+        // Extract base and number parts (e.g., "ai-body-req10" -> "ai-body-req" + "10")
+        const match = baseValue.match(/^(.+?)(\d+)$/);
+        if (match) {
+          const prefix = match[1];
+          const startNum = parseInt(match[2]);
+          const result = `${prefix}${startNum + requestIndex}`;
+          return result;
+        }
+        // If no number found, append the index
+        const result = `${baseValue}-${requestIndex + 1}`;
         return result;
       }
-      // If no number found, append the index
-      const result = `${baseValue}-${requestIndex + 1}`;
-      return result;
+
+      // Check for startValue (AI format)
+      if (parameters?.startValue) {
+        const startValue = parameters.startValue.toString();
+        console.log(
+          `🔍 Executor: Processing startValue: "${startValue}" with requestIndex: ${requestIndex}`
+        );
+
+        // Extract base and number parts (e.g., "ai-claude-req2" -> "ai-claude-req" + "2")
+        const match = startValue.match(/^(.+?)(\d+)$/);
+        if (match) {
+          const prefix = match[1];
+          const startNum = parseInt(match[2]);
+          const result = `${prefix}${startNum + requestIndex}`;
+          console.log(
+            `🔍 Executor: Incremented with pattern: "${prefix}${
+              startNum + requestIndex
+            }"`
+          );
+          return result;
+        }
+        // If no number found, append the index
+        const result = `${startValue}-${requestIndex + 1}`;
+        console.log(`🔍 Executor: Appended index: "${result}"`);
+        return result;
+      }
     }
 
     // Check if parameters contain a literal value (user-specified value)
@@ -628,5 +730,77 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
       recommendations.push("🚀 Your API load test completed with real data!");
     }
     return recommendations;
+  }
+
+  private getDurationInMs(duration: { value: number; unit: string }): number {
+    const { value, unit } = duration;
+    switch (unit.toLowerCase()) {
+      case "seconds":
+      case "s":
+        return value * 1000;
+      case "minutes":
+      case "m":
+        return value * 60 * 1000;
+      case "hours":
+      case "h":
+        return value * 60 * 60 * 1000;
+      default:
+        return value * 1000; // Default to seconds
+    }
+  }
+
+  private formatDuration(duration: { value: number; unit: string }): string {
+    return `${duration.value} ${duration.unit}`;
+  }
+
+  private async makeRequestWithRetry(config: any): Promise<AxiosResponse> {
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second base delay
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await axios(config);
+
+        // If it's a 5xx error, retry (except on last attempt)
+        if (
+          response.status >= 500 &&
+          response.status < 600 &&
+          attempt < maxRetries
+        ) {
+          const delay = retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
+          console.log(
+            chalk.yellow(
+              `⚠️  Server error ${response.status}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`
+            )
+          );
+          await this.sleep(delay);
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        // Network errors or timeouts - retry (except on last attempt)
+        if (attempt < maxRetries) {
+          const delay = retryDelay * Math.pow(2, attempt - 1);
+          console.log(
+            chalk.yellow(
+              `⚠️  Request failed, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`
+            )
+          );
+          await this.sleep(delay);
+          continue;
+        }
+
+        // Last attempt failed, re-throw
+        throw error;
+      }
+    }
+
+    // This should never be reached, but just in case
+    throw new Error("Max retries exceeded");
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

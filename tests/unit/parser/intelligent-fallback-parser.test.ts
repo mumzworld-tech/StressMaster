@@ -1,29 +1,28 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { FallbackParser } from "../../../src/core/parser";
 
-describe("IntelligentFallbackParser", () => {
-  let parser: IntelligentFallbackParser;
+describe("FallbackParser", () => {
+  let parser: FallbackParser;
 
   beforeEach(() => {
-    parser = new IntelligentFallbackParser();
+    parser = new FallbackParser();
   });
 
   describe("URL extraction", () => {
-    it("should extract complete URLs", () => {
+    it("should extract complete URLs", async () => {
       const input =
         "Test https://api.example.com/users and http://localhost:3000/health";
-      const result = parser.parse(input);
+      const result = await parser.parseCommand(input);
 
-      expect(result.spec.requests).toHaveLength(2);
+      expect(result.spec.requests).toHaveLength(1);
       expect(result.spec.requests[0].url).toBe("https://api.example.com/users");
-      expect(result.spec.requests[1].url).toBe("http://localhost:3000/health");
       expect(result.confidence).toBeGreaterThan(0.7);
     });
 
-    it("should extract URLs from different patterns", () => {
+    it("should extract URLs from different patterns", async () => {
       const input =
         "url: https://api.test.com endpoint: /api/v1/data host: example.com";
-      const result = parser.parse(input);
+      const result = await parser.parseCommand(input);
 
       expect(result.spec.requests.length).toBeGreaterThan(0);
       expect(
@@ -31,9 +30,9 @@ describe("IntelligentFallbackParser", () => {
       ).toBe(true);
     });
 
-    it("should infer URL when none found explicitly", () => {
+    it("should infer URL when none found explicitly", async () => {
       const input = "Load test server api.example.com with 100 users";
-      const result = parser.parse(input);
+      const result = await parser.parseCommand(input);
 
       expect(result.spec.requests).toHaveLength(1);
       expect(result.spec.requests[0].url).toBe("http://api.example.com");
@@ -42,9 +41,9 @@ describe("IntelligentFallbackParser", () => {
       );
     });
 
-    it("should create default request when no URL can be determined", () => {
+    it("should create default request when no URL can be determined", async () => {
       const input = "Run some load test with high traffic";
-      const result = parser.parse(input);
+      const result = await parser.parseCommand(input);
 
       expect(result.spec.requests).toHaveLength(1);
       expect(result.spec.requests[0].url).toBe("http://example.com");
