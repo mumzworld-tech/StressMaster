@@ -31,9 +31,23 @@ export class DisplayManager {
     console.log();
 
     console.log(chalk.yellow.bold("📊 Export Commands:"));
-    console.log(chalk.gray("  export json filename.json"));
-    console.log(chalk.gray("  export csv filename.csv"));
-    console.log(chalk.gray("  export html filename.html"));
+    console.log(
+      chalk.gray("  export json                    - Export last test as JSON")
+    );
+    console.log(
+      chalk.gray("  export csv                     - Export last test as CSV")
+    );
+    console.log(
+      chalk.gray("  export html                    - Export last test as HTML")
+    );
+    console.log(
+      chalk.gray("  export json --include-raw      - Include raw data")
+    );
+    console.log(
+      chalk.gray(
+        "  export html --include-recommendations - Include recommendations"
+      )
+    );
     console.log();
 
     console.log(chalk.yellow.bold("💡 Tips:"));
