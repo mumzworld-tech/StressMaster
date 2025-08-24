@@ -54,9 +54,11 @@ Your task is to parse user commands and extract:
 - HTTP method (GET, POST, PUT, DELETE, etc.)
 - Target URL
 - Request payload template and variables
-- Load pattern (constant, ramp-up, spike, step)
+- Load pattern (constant, ramp-up, spike, step, random-burst)
 - Test duration and virtual users or RPS
 - Test type (spike, stress, endurance, volume, baseline)
+- Bulk data handling for high-volume payloads
+- Random burst patterns for unpredictable traffic simulation
 
 CRITICAL RULES FOR JSON HANDLING:
 1. When the command contains a complete JSON object (like {"requestId": "seller-req1", "payload": [...]}), use that EXACT JSON as the request body
@@ -67,6 +69,8 @@ CRITICAL RULES FOR JSON HANDLING:
 6. If the command says "increment order_id and increment_id", create template variables ONLY for those specific fields
 7. Preserve the complete JSON structure as-is
 8. Respond with ONLY the JSON object, no other text
+9. For load patterns, use SIMPLE configurations: just set "type" and "virtualUsers" to the requested count
+10. Do NOT create complex spike/ramp configurations with baselineVirtualUsers, peakVirtualUsers, etc.
 
 Key guidelines:
 1. Generate unique IDs using timestamp-based approach
@@ -75,6 +79,12 @@ Key guidelines:
 4. Use reasonable defaults for missing parameters
 5. Extract variable definitions from payload descriptions
 6. Set appropriate load patterns based on the test description
+7. For "random intervals" or "unpredictable traffic", use "random-burst" load pattern
+8. For bulk data with multiple items, use "bulk_data" variable type with itemCount parameter
+9. For high-volume tests (1000+ requests), use "volume" test type
+10. For spike patterns, use simple "spike" type with virtualUsers set to the requested count
+11. For ramp-up patterns, use simple "ramp-up" type with virtualUsers set to the target count
+12. Keep load patterns simple - avoid complex configurations that executors cannot handle
 
 EXAMPLE: If command is "send 2 POST requests to http://backbone.mumz.io/magento/qcomm-order with body {"requestId": "seller-req1", "payload": [{"order_id": "5783136"}]} increment order_id"
 - Use URL: http://backbone.mumz.io/magento/qcomm-order
@@ -211,29 +221,33 @@ Respond with only valid JSON, no additional text or explanation.`;
       description: "Simple POST request with concurrent users",
     },
     {
-      input: "Spike test with 1000 requests in 10 seconds to GET /api/users",
+      input:
+        'send 6 POST requests with spike pattern to https://httpbin.org/post with body {"test":"spike-data"}',
       output: {
         id: "test_" + Date.now(),
-        name: "Spike Test Users API",
-        description:
-          "Spike test with 1000 requests in 10 seconds to GET /api/users",
+        name: "Spike Test",
+        description: "Spike pattern test with POST requests",
         testType: "spike",
         requests: [
           {
-            method: "GET",
-            url: "/api/users",
+            method: "POST",
+            url: "https://httpbin.org/post",
+            payload: {
+              template: '{"test":"spike-data"}',
+              variables: [],
+            },
           },
         ],
         loadPattern: {
           type: "spike",
-          virtualUsers: 1000,
+          virtualUsers: 6,
         },
         duration: {
-          value: 10,
+          value: 30,
           unit: "seconds",
         },
       },
-      description: "Spike test with high load in short duration",
+      description: "Simple spike pattern test with specified request count",
     },
     {
       input:
@@ -317,6 +331,107 @@ Respond with only valid JSON, no additional text or explanation.`;
         },
       },
       description: "Curl command with JSON payload",
+    },
+    {
+      input:
+        "Send X requests at random intervals to simulate unpredictable real-world traffic patterns",
+      output: {
+        id: "test_" + Date.now(),
+        name: "Random Burst Traffic Test",
+        description:
+          "Send X requests at random intervals to simulate unpredictable real-world traffic patterns",
+        testType: "baseline",
+        requests: [
+          {
+            method: "GET",
+            url: "https://api.example.com/health",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        ],
+        loadPattern: {
+          type: "random-burst",
+          virtualUsers: 50,
+          burstConfig: {
+            minBurstSize: 5,
+            maxBurstSize: 20,
+            minIntervalSeconds: 2,
+            maxIntervalSeconds: 15,
+            burstProbability: 0.3,
+          },
+        },
+        duration: {
+          value: 10,
+          unit: "minutes",
+        },
+      },
+      description: "Random burst pattern for unpredictable traffic simulation",
+    },
+    {
+      input:
+        "Push 1,000 requests, each carrying 100 items per payload to stress test bulk data handling",
+      output: {
+        id: "test_" + Date.now(),
+        name: "High-Volume Bulk Data Test",
+        description:
+          "Push 1,000 requests, each carrying 100 items per payload to stress test bulk data handling",
+        testType: "volume",
+        requests: [
+          {
+            method: "POST",
+            url: "https://api.example.com/bulk-data",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            payload: {
+              template: '{"batchId": "{{batchId}}", "items": {{items}}}',
+              variables: [
+                {
+                  name: "batchId",
+                  type: "uuid",
+                  parameters: {},
+                },
+                {
+                  name: "items",
+                  type: "bulk_data",
+                  parameters: {
+                    itemCount: 100,
+                    itemTemplate:
+                      '{"id": "{{itemId}}", "name": "{{itemName}}", "value": "{{itemValue}}"}',
+                    itemVariables: [
+                      {
+                        name: "itemId",
+                        type: "random_id",
+                        parameters: { min: 1000, max: 999999 },
+                      },
+                      {
+                        name: "itemName",
+                        type: "random_string",
+                        parameters: { length: 10 },
+                      },
+                      {
+                        name: "itemValue",
+                        type: "random_string",
+                        parameters: { length: 8 },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        loadPattern: {
+          type: "constant",
+          virtualUsers: 1000,
+        },
+        duration: {
+          value: 5,
+          unit: "minutes",
+        },
+      },
+      description: "High-volume bulk data payload test",
     },
   ];
 
