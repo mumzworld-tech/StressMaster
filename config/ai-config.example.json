@@ -22,7 +22,7 @@
   "_claude_example": {
     "provider": "claude",
     "apiKey": "${AI_API_KEY}",
-    "model": "claude-3-sonnet-20240229",
+    "model": "claude-3-5-sonnet-20241022",
     "maxRetries": 3,
     "timeout": 30000
   },

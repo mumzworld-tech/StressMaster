@@ -1,22 +1,10 @@
 {
-  "provider": "ollama",
-  "ollama": {
-    "endpoint": "http://localhost:11434",
-    "model": "llama3.2:1b"
-  },
-  "openai": {
-    "apiKey": "",
-    "model": "gpt-4o-mini",
-    "maxTokens": 2000
-  },
-  "anthropic": {
-    "apiKey": "",
-    "model": "claude-3-sonnet-20240229",
-    "maxTokens": 2000
-  },
-  "gemini": {
-    "apiKey": "",
-    "model": "gemini-pro",
-    "maxTokens": 2000
+  "provider": "claude",
+  "apiKey": "${AI_API_KEY}",
+  "model": "claude-3-5-sonnet-20241022",
+  "maxRetries": 3,
+  "timeout": 30000,
+  "options": {
+    "temperature": 0.1
   }
 }
