@@ -11,7 +11,12 @@ export type HttpMethod =
 
 export type TestType = "spike" | "stress" | "endurance" | "volume" | "baseline";
 
-export type LoadPatternType = "constant" | "ramp-up" | "spike" | "step";
+export type LoadPatternType =
+  | "constant"
+  | "ramp-up"
+  | "spike"
+  | "step"
+  | "random-burst";
 
 export type VariableType =
   | "random_id"
@@ -21,7 +26,10 @@ export type VariableType =
   | "sequence"
   | "literal"
   | "incremental"
-  | "custom";
+  | "custom"
+  | "array_item"
+  | "random_array"
+  | "bulk_data";
 
 export type TestStatus = "completed" | "failed" | "cancelled";
 

@@ -34,7 +34,10 @@ const variableDefinitionSchema = Joi.object({
       "timestamp",
       "random_string",
       "sequence",
-      "custom"
+      "custom",
+      "array_item",
+      "random_array",
+      "bulk_data"
     )
     .required(),
   parameters: Joi.object().optional(),
@@ -68,13 +71,34 @@ const requestSpecSchema = Joi.object({
 
 // Load pattern schema
 const loadPatternSchema = Joi.object({
-  type: Joi.string().valid("constant", "ramp-up", "spike", "step").required(),
-  virtualUsers: Joi.number().integer().positive().optional(),
+  type: Joi.string()
+    .valid("constant", "ramp-up", "spike", "step", "random-burst")
+    .required(),
+  virtualUsers: Joi.number().positive().optional(),
   requestsPerSecond: Joi.number().positive().optional(),
   rampUpTime: durationSchema.optional(),
   plateauTime: durationSchema.optional(),
+  rampDownTime: durationSchema.optional(),
+  baselineVUs: Joi.number().positive().optional(),
+  spikeIntensity: Joi.number().positive().optional(),
+  volumeTarget: Joi.number().positive().optional(),
+  burstConfig: Joi.object({
+    minBurstSize: Joi.number().positive().required(),
+    maxBurstSize: Joi.number().positive().required(),
+    minIntervalSeconds: Joi.number().positive().required(),
+    maxIntervalSeconds: Joi.number().positive().required(),
+    burstProbability: Joi.number().min(0).max(1).required(),
+  }).optional(),
+  stages: Joi.array()
+    .items(
+      Joi.object({
+        duration: Joi.string().required(),
+        target: Joi.number().required(),
+      })
+    )
+    .optional(),
 })
-  .custom((value, helpers) => {
+  .custom((value: any, helpers: any) => {
     // At least one of virtualUsers or requestsPerSecond must be specified
     if (!value.virtualUsers && !value.requestsPerSecond) {
       return helpers.error("custom.missingLoadMetric");
