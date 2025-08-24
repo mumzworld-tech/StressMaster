@@ -171,7 +171,7 @@ export const ParserPresets = {
   },
   claude: {
     aiProvider: "claude" as const,
-    modelName: "claude-3-sonnet-20240229",
+    modelName: "claude-3-5-sonnet-20241022",
     maxRetries: 3,
     timeout: 30000,
   },

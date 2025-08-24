@@ -211,6 +211,28 @@ export class FallbackParser {
   private extractBodies(input: string): string[] {
     const bodies: string[] = [];
 
+    // First, check for file references like @filename.json
+    const fileMatch = input.match(/@([a-zA-Z0-9._-]+\.json)/);
+    if (fileMatch) {
+      const filename = fileMatch[1];
+      try {
+        const fs = require("fs");
+        const path = require("path");
+        const filePath = path.join(process.cwd(), filename);
+
+        if (fs.existsSync(filePath)) {
+          const fileContent = fs.readFileSync(filePath, "utf8");
+          console.log(`📁 Loaded JSON from file: ${filename}`);
+          bodies.push(fileContent);
+          return bodies;
+        } else {
+          console.warn(`⚠️ File not found: ${filename}`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Error reading file ${filename}:`, error);
+      }
+    }
+
     // Try to find JSON bodies with more specific patterns first
     for (const pattern of this.rules.bodyPatterns) {
       const matches = input.match(pattern);
@@ -438,9 +460,9 @@ export class FallbackParser {
       loadPattern.virtualUsers = parseInt(userMatch[1]);
     }
 
-    // Extract duration
+    // Extract duration - handle "over X seconds" pattern
     const durationMatch = input.match(
-      /(\d+)\s*(seconds?|minutes?|hours?|s|m|h)/i
+      /(?:over\s+)?(\d+)\s*(seconds?|minutes?|hours?|s|m|h)/i
     );
     const duration = durationMatch
       ? {

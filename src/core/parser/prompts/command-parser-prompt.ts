@@ -9,7 +9,7 @@ export const COMMAND_PARSER_PROMPT: PromptTemplate = {
 Schema:
 {
   "method": "GET|POST|PUT|DELETE|PATCH",
-  "url": "https://example.com",
+  "url": "extract-actual-url-from-command",
   "headers": {},
   "queryParams": {},
   "body": null OR {...},
@@ -19,17 +19,19 @@ Schema:
 }
 
 EXAMPLE INPUT:
-Send 2 POST requests to https://example.com/api with body { "id": 123 }
+Send 2 POST requests to https://api.example.com/users with body { "id": 123 }
 
 EXAMPLE OUTPUT:
 {
   "method": "POST",
-  "url": "https://example.com/api",
+  "url": "https://api.example.com/users",
   "headers": {},
   "queryParams": {},
   "body": { "id": 123 },
   "requestCount": 2
 }
+
+IMPORTANT: Extract the actual URL from the command, do not use placeholder URLs.
 
 Command: "{{input}}"
 
@@ -89,7 +91,7 @@ export const WORKING_COMMAND_PROMPT: PromptTemplate = {
 Schema:
 {
   "method": "GET|POST|PUT|DELETE|PATCH",
-  "url": "https://example.com",
+  "url": "extract-actual-url-from-command",
   "headers": {},
   "queryParams": {},
   "body": null OR {...},
@@ -97,6 +99,8 @@ Schema:
   "loadPattern": { "type": "constant|ramp", "virtualUsers": number } (optional),
   "duration": { "value": number, "unit": "seconds|minutes" } (optional)
 }
+
+IMPORTANT: Extract the actual URL from the command, do not use placeholder URLs.
 
 EXAMPLE INPUT:
 Send 2 POST requests to https://example.com/api with body { "id": 123 }
