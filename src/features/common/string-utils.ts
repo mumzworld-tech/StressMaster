@@ -139,6 +139,47 @@ export function generateTestName(input: string): string {
 }
 
 /**
+ * Generates a meaningful test ID based on test parameters
+ */
+export function generateTestId(spec: any): string {
+  const timestamp = Date.now();
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
+  const time = new Date().toISOString().slice(11, 19).replace(/:/g, ""); // HHMMSS
+
+  // Extract meaningful parts from the spec
+  const testType = spec.testType || "test";
+  const method = spec.requests?.[0]?.method || "GET";
+  const url = spec.requests?.[0]?.url || "unknown";
+
+  // Create a short domain name
+  let domain = "unknown";
+  try {
+    const urlObj = new URL(url);
+    domain = urlObj.hostname.replace(/\./g, "_").substring(0, 15);
+  } catch (e) {
+    domain = url.substring(0, 15).replace(/[^a-zA-Z0-9]/g, "_");
+  }
+
+  // Create a short random suffix
+  const suffix = Math.random().toString(36).substring(2, 6);
+
+  // Format: test_YYYYMMDD_HHMMSS_METHOD_DOMAIN_SUFFIX
+  return `${testType}_${date}_${time}_${method}_${domain}_${suffix}`;
+}
+
+/**
+ * Generates a fallback test ID if spec is not available
+ */
+export function generateFallbackTestId(): string {
+  const timestamp = Date.now();
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const time = new Date().toISOString().slice(11, 19).replace(/:/g, "");
+  const suffix = Math.random().toString(36).substring(2, 6);
+
+  return `test_${date}_${time}_${suffix}`;
+}
+
+/**
  * Converts camelCase or PascalCase to kebab-case
  */
 export function toKebabCase(str: string): string {
