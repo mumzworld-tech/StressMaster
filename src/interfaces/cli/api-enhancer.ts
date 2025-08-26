@@ -172,8 +172,12 @@ export class APIEnhancer {
       enhanced = true;
     }
 
-    // Detect simple JSON patterns
-    if (input.match(/json\s+body|json\s+payload/i) && !spec.requests[0].body) {
+    // Detect simple JSON patterns - only if no body is already present
+    if (
+      input.match(/json\s+body|json\s+payload/i) &&
+      !spec.requests[0].body &&
+      !spec.requests[0].payload
+    ) {
       spec.requests[0].body = {
         requestId: "req-123",
         timestamp: Date.now(),
@@ -211,12 +215,16 @@ export class APIEnhancer {
       enhanced = true;
     }
 
-    // Detect API versioning patterns
+    // Detect API versioning patterns - only if URL doesn't already have a version path
     if (input.match(/v\d+|version\s+\d+/i) && spec.requests[0].url) {
       const versionMatch = input.match(/v(\d+)|version\s+(\d+)/i);
       if (versionMatch) {
         const version = versionMatch[1] || versionMatch[2];
-        if (!spec.requests[0].url.includes(`/v${version}`)) {
+        // Only add version if URL doesn't already contain a version path
+        if (
+          !spec.requests[0].url.includes(`/v${version}`) &&
+          !spec.requests[0].url.includes(`/V${version}`)
+        ) {
           spec.requests[0].url = spec.requests[0].url.replace(
             /(https?:\/\/[^\/]+)/,
             `$1/v${version}`
