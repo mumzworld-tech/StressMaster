@@ -142,6 +142,7 @@ export class FallbackParser {
             };
           } else {
             // Simple body without incrementing
+            // Set the body directly - it's already loaded from file or extracted from command
             request.body = this.normalizeJsonQuotes(bodies[0]);
           }
         }
@@ -211,10 +212,10 @@ export class FallbackParser {
   private extractBodies(input: string): string[] {
     const bodies: string[] = [];
 
-    // First, check for file references like @filename.json
-    const fileMatch = input.match(/@([a-zA-Z0-9._-]+\.json)/);
+    // Check for file references - both @filename.json and natural language patterns
+    const fileMatch = this.extractFileReference(input);
     if (fileMatch) {
-      const filename = fileMatch[1];
+      const filename = fileMatch;
       try {
         const fs = require("fs");
         const path = require("path");
@@ -273,6 +274,34 @@ export class FallbackParser {
     }
 
     return bodies;
+  }
+
+  /**
+   * Extract file references from natural language input
+   * Supports both @filename.json and natural language patterns like "from filename.json"
+   */
+  private extractFileReference(input: string): string | null {
+    // First check for @filename.json pattern
+    const atPattern = input.match(/@([a-zA-Z0-9._-]+\.json)/);
+    if (atPattern) {
+      return atPattern[1];
+    }
+
+    // Check for natural language patterns
+    const naturalPatterns = [
+      /(?:from|in|using|with|load|read)\s+([a-zA-Z0-9._-]+\.json)/gi,
+      /(?:body|payload|data|json)\s+(?:from|in|using|with)\s+([a-zA-Z0-9._-]+\.json)/gi,
+      /(?:JSON\s+)?body\s+from\s+([a-zA-Z0-9._-]+\.json)/gi,
+    ];
+
+    for (const pattern of naturalPatterns) {
+      const match = input.match(pattern);
+      if (match) {
+        return match[1];
+      }
+    }
+
+    return null;
   }
 
   private normalizeJsonQuotes(jsonString: string): string {

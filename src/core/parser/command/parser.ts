@@ -259,6 +259,29 @@ export class UnifiedCommandParser implements CommandParser {
     try {
       let response;
 
+      // Check for file references first - use fallback parser for these regardless of provider
+      if (input.includes("@") && input.includes(".json")) {
+        console.log("🔄 File reference detected - using fallback parser");
+        throw new Error("Use fallback parser for file references");
+      }
+
+      // Check for natural language file references
+      const naturalFilePatterns = [
+        /(?:from|in|using|with|load|read)\s+([a-zA-Z0-9._-]+\.json)/gi,
+        /(?:body|payload|data|json)\s+(?:from|in|using|with)\s+([a-zA-Z0-9._-]+\.json)/gi,
+        /(?:JSON\s+)?body\s+from\s+([a-zA-Z0-9._-]+\.json)/gi,
+      ];
+
+      for (const pattern of naturalFilePatterns) {
+        const match = input.match(pattern);
+        if (match) {
+          console.log(
+            `🔄 Natural language file reference detected: "${match[0]}" - using fallback parser`
+          );
+          throw new Error("Use fallback parser for file references");
+        }
+      }
+
       // For Claude, we trust it to handle complex commands and file references
       if (this.config.aiProvider === "claude") {
         // Use the full prompt builder for Claude
@@ -275,11 +298,6 @@ export class UnifiedCommandParser implements CommandParser {
         });
       } else {
         // For other providers, use the original logic
-        // Check if command contains file references - use fallback parser for these
-        if (input.includes("@") && input.includes(".json")) {
-          console.log("🔄 File reference detected - using fallback parser");
-          throw new Error("Use fallback parser for file references");
-        }
 
         // Build the prompt for AI parsing using intelligent template selection
         const prompt = selectPromptTemplate(input);
