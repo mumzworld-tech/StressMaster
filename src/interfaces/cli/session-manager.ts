@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { SessionContext, CLIConfig } from "./cli-interface";
 import { CommandHistoryManager } from "./command-history";
 import { promises as fs } from "fs";
+import { readFileSync } from "fs";
 import path from "path";
 import os from "os";
 
@@ -89,6 +90,9 @@ export class SessionManager {
     );
     console.log();
 
+    // Display AI provider info
+    this.displayAIProviderInfo();
+
     // Session info with better formatting
     console.log(chalk.gray("📋 Session Info:"));
     console.log(chalk.gray(`   ID: ${chalk.cyan(this.session.sessionId)}`));
@@ -131,5 +135,22 @@ export class SessionManager {
 
   addTestToHistory(testResult: any): void {
     this.session.testHistory.push(testResult);
+  }
+
+  private displayAIProviderInfo(): void {
+    try {
+      const aiConfigPath = path.join(process.cwd(), "config", "ai-config.json");
+      const aiConfig = JSON.parse(readFileSync(aiConfigPath, "utf8"));
+
+      console.log(chalk.green("🤖 AI Provider:"));
+      console.log(chalk.gray(`   Provider: ${chalk.cyan(aiConfig.provider)}`));
+      console.log(chalk.gray(`   Model: ${chalk.cyan(aiConfig.model)}`));
+      console.log();
+    } catch (error) {
+      console.log(
+        chalk.yellow("⚠️  AI Provider: Could not load configuration")
+      );
+      console.log();
+    }
   }
 }

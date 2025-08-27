@@ -201,15 +201,12 @@ export class InteractiveCLI implements CLIInterface {
         .trim();
 
       // Initialize parser and executor with proper configuration
-      const apiKey = process.env.AI_API_KEY;
-      if (!apiKey) {
-        throw new Error("AI_API_KEY environment variable not set");
-      }
-
       const parser = new UnifiedCommandParser({
-        aiProvider: "claude", // Force Claude provider
-        modelName: "claude-3-5-sonnet-20241022",
-        apiKey: apiKey,
+        // Read from config file only - no environment variables needed
+        aiProvider: undefined,
+        modelName: undefined,
+        apiKey: undefined,
+        ollamaEndpoint: undefined,
       });
       const executor = new SmartLoadExecutor();
 
