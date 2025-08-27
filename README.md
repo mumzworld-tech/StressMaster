@@ -1,6 +1,16 @@
 # StressMaster
 
-A local-first AI-powered load testing tool that accepts natural language commands to perform API load testing. The system uses a local LLM (LLaMA3 via Ollama) to parse user prompts and convert them into structured load test specifications that can be executed using K6.
+A local-first AI-powered load testing tool that accepts natural language commands to perform API load testing. The system uses AI models to parse user prompts and convert them into structured load test specifications that can be executed using K6.
+
+## 🤖 AI Provider Support
+
+StressMaster supports multiple AI providers for natural language parsing:
+
+- **Ollama** (Local, Free) - LLaMA3, Mistral, CodeLlama, and other local models
+- **OpenAI** - GPT-3.5, GPT-4, and other OpenAI models
+- **Claude** - Claude 3 models via direct API or OpenRouter
+- **OpenRouter** - Access to multiple AI models through OpenRouter
+- **Google Gemini** - Gemini Pro and other Google AI models
 
 ## 🚀 Features
 
@@ -99,6 +109,59 @@ Try your first load test:
 ```
 Send 100 GET requests to https://httpbin.org/get over 30 seconds
 ```
+
+### 3. AI Provider Configuration
+
+StressMaster automatically creates a configuration file on first use. You can switch between AI providers using simple commands:
+
+#### Quick Provider Switching:
+
+```bash
+# Switch to Ollama (local, free)
+sm-ollama
+
+# Switch to Claude via OpenRouter
+sm-claude-openrouter
+
+# Switch to OpenAI
+sm-openai
+
+# Switch to direct Claude API
+sm-claude
+
+# Switch to OpenRouter with multiple models
+sm-openrouter
+
+# Switch to Google Gemini
+sm-gemini
+```
+
+#### Manual Configuration:
+
+The AI configuration is stored in `config/ai-config.json` (automatically created on first use):
+
+```json
+{
+  "provider": "ollama",
+  "model": "llama3.2:1b",
+  "endpoint": "http://localhost:11434",
+  "maxRetries": 3,
+  "timeout": 30000,
+  "options": {
+    "temperature": 0.1
+  }
+}
+```
+
+#### Provider Setup:
+
+- **Ollama**: Install Ollama and run `ollama serve`, then `ollama pull llama3.2:1b`
+- **OpenAI**: Get API key from OpenAI and use `sm-openai`
+- **Claude**: Get API key from Anthropic and use `sm-claude`
+- **OpenRouter**: Get API key from OpenRouter and use `sm-claude-openrouter` or `sm-openrouter`
+- **Gemini**: Get API key from Google AI and use `sm-gemini`
+
+> **Note**: The `config/ai-config.json` file contains API keys and is automatically excluded from git. Use `config/ai-config.example.json` as a reference.
 
 ## 💻 CLI Usage
 

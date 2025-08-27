@@ -1,4 +1,7 @@
 {
+  "_comment": "Example AI configuration file. Copy this to ai-config.json and update with your settings.",
+  "_comment2": "This file is safe to commit to git as it contains no real API keys.",
+
   "provider": "ollama",
   "model": "llama3.2:1b",
   "endpoint": "http://localhost:11434",
@@ -9,29 +12,55 @@
     "top_p": 0.9
   },
 
-  "_comment": "Alternative configurations:",
+  "_examples": {
+    "ollama": {
+      "_comment": "Local AI models (free, requires Ollama installation)",
+      "provider": "ollama",
+      "model": "llama3.2:1b",
+      "endpoint": "http://localhost:11434"
+    },
 
-  "_openai_example": {
-    "provider": "openai",
-    "apiKey": "${AI_API_KEY}",
-    "model": "gpt-3.5-turbo",
-    "maxRetries": 3,
-    "timeout": 30000
+    "openai": {
+      "_comment": "OpenAI GPT models (requires OpenAI API key)",
+      "provider": "openai",
+      "apiKey": "sk-your-openai-api-key-here",
+      "model": "gpt-3.5-turbo"
+    },
+
+    "claude": {
+      "_comment": "Claude models via direct API (requires Claude API key)",
+      "provider": "claude",
+      "apiKey": "sk-ant-your-claude-api-key-here",
+      "model": "claude-3-5-sonnet-20241022"
+    },
+
+    "claude-openrouter": {
+      "_comment": "Claude models via OpenRouter (requires OpenRouter API key)",
+      "provider": "claude",
+      "apiKey": "sk-or-your-openrouter-api-key-here",
+      "model": "claude-3-5-sonnet-20241022"
+    },
+
+    "openrouter": {
+      "_comment": "Multiple models via OpenRouter (requires OpenRouter API key)",
+      "provider": "openrouter",
+      "apiKey": "sk-or-your-openrouter-api-key-here",
+      "model": "anthropic/claude-3.5-sonnet"
+    },
+
+    "gemini": {
+      "_comment": "Google Gemini models (requires Google AI API key)",
+      "provider": "gemini",
+      "apiKey": "your-google-ai-api-key-here",
+      "model": "gemini-pro"
+    }
   },
 
-  "_claude_example": {
-    "provider": "claude",
-    "apiKey": "${AI_API_KEY}",
-    "model": "claude-3-5-sonnet-20241022",
-    "maxRetries": 3,
-    "timeout": 30000
-  },
-
-  "_gemini_example": {
-    "provider": "gemini",
-    "apiKey": "${AI_API_KEY}",
-    "model": "gemini-pro",
-    "maxRetries": 3,
-    "timeout": 30000
-  }
+  "_setup_instructions": [
+    "1. Copy this file to ai-config.json",
+    "2. Choose your preferred AI provider",
+    "3. Update the configuration with your API keys",
+    "4. Or use the switch commands: sm-ollama, sm-claude, sm-openai, etc.",
+    "5. Test with: stressmaster 'GET 3 requests to https://httpbin.org/get'"
+  ]
 }
