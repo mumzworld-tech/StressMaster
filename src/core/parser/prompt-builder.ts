@@ -66,11 +66,18 @@ CRITICAL RULES FOR JSON HANDLING:
 3. Do NOT extract individual fields from complete JSON objects
 4. Use the exact URL specified in the command
 5. Use the exact HTTP method specified in the command
-6. If the command says "increment order_id and increment_id", create template variables ONLY for those specific fields
-7. Preserve the complete JSON structure as-is
-8. Respond with ONLY the JSON object, no other text
-9. For load patterns, use SIMPLE configurations: just set "type" and "virtualUsers" to the requested count
-10. Do NOT create complex spike/ramp configurations with baselineVirtualUsers, peakVirtualUsers, etc.
+6. If the command says "increment requestId", create a template variable for "requestId" field ONLY
+7. If the command says "increment order_id and increment_id", create template variables ONLY for those specific fields
+8. Preserve the complete JSON structure as-is
+9. Respond with ONLY the JSON object, no other text
+10. For load patterns, use SIMPLE configurations: just set "type" and "virtualUsers" to the requested count
+11. Do NOT create complex spike/ramp configurations with baselineVirtualUsers, peakVirtualUsers, etc.
+
+FILE REFERENCE HANDLING:
+1. When you see "@filename.json" in the command, use that as the payload template
+2. Set the payload template to "@filename.json" - the executor will load the file content
+3. If the command says "increment requestId", create a variable for requestId with incremental type
+4. Preserve the file reference format exactly as provided
 
 Key guidelines:
 1. Generate unique IDs using timestamp-based approach
@@ -86,11 +93,24 @@ Key guidelines:
 11. For ramp-up patterns, use simple "ramp-up" type with virtualUsers set to the target count
 12. Keep load patterns simple - avoid complex configurations that executors cannot handle
 
+EXAMPLE: If command is "send 2 POST requests to http://backbone.mumz.io/magento/qcomm-order with body {"requestId": "seller-req1", "payload": [{"order_id": "5783136"}]} increment requestId"
+- Use URL: http://backbone.mumz.io/magento/qcomm-order
+- Use method: POST
+- Use body: {"requestId": "{{requestId}}", "payload": [{"order_id": "5783136"}]}
+- Create variable: requestId with type "incremental"
+
 EXAMPLE: If command is "send 2 POST requests to http://backbone.mumz.io/magento/qcomm-order with body {"requestId": "seller-req1", "payload": [{"order_id": "5783136"}]} increment order_id"
 - Use URL: http://backbone.mumz.io/magento/qcomm-order
 - Use method: POST
 - Use body: {"requestId": "seller-req1", "payload": [{"order_id": "{{order_id}}"}]}
 - Create variable: order_id with type "incremental"
+
+EXAMPLE WITH FILE REFERENCE: If command is "send 3 post requests to http://backbone.mumz.io/qcomm-order with JSON body @magento-order-payload.json increment requestId"
+- Use URL: http://backbone.mumz.io/qcomm-order
+- Use method: POST
+- Use payload template: "@magento-order-payload.json"
+- Create variable: requestId with type "incremental" and baseValue that matches the actual value in the file
+- The executor will automatically replace the requestId field in the loaded JSON with the incremented value
 
 RESPOND WITH ONLY THIS JSON FORMAT:
 {
@@ -103,12 +123,14 @@ RESPOND WITH ONLY THIS JSON FORMAT:
       "method": "POST",
       "url": "http://backbone.mumz.io/magento/qcomm-order",
       "payload": {
-        "template": "{\\"requestId\\": \\"seller-req1\\", \\"payload\\": [{\\"order_id\\": \\"{{order_id}}\\"}]}",
+        "template": "{\\"requestId\\": \\"{{requestId}}\\", \\"payload\\": [{\\"externalId\\": \\"ord#1\\"}]}",
         "variables": [
           {
-            "name": "order_id",
+            "name": "requestId",
             "type": "incremental",
-            "startValue": "5783136"
+            "parameters": {
+              "baseValue": "log-testin1"
+            }
           }
         ]
       }

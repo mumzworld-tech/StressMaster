@@ -259,13 +259,12 @@ export class UnifiedCommandParser implements CommandParser {
     try {
       let response;
 
-      // Check for file references first - use fallback parser for these regardless of provider
+      // Allow AI parsing for file references - let the AI handle them naturally
       if (input.includes("@") && input.includes(".json")) {
-        console.log("🔄 File reference detected - using fallback parser");
-        throw new Error("Use fallback parser for file references");
+        console.log("📁 File reference detected - using AI parser");
       }
 
-      // Check for natural language file references
+      // Check for natural language file references - also allow AI parsing
       const naturalFilePatterns = [
         /(?:from|in|using|with|load|read)\s+([a-zA-Z0-9._-]+\.json)/gi,
         /(?:body|payload|data|json)\s+(?:from|in|using|with)\s+([a-zA-Z0-9._-]+\.json)/gi,
@@ -276,9 +275,8 @@ export class UnifiedCommandParser implements CommandParser {
         const match = input.match(pattern);
         if (match) {
           console.log(
-            `🔄 Natural language file reference detected: "${match[0]}" - using fallback parser`
+            `📁 Natural language file reference detected: "${match[0]}" - using AI parser`
           );
-          throw new Error("Use fallback parser for file references");
         }
       }
 
@@ -414,9 +412,47 @@ export class UnifiedCommandParser implements CommandParser {
                     if (variable.startValue && !variable.parameters) {
                       // For requestId, create a proper base value
                       let startValue = variable.startValue;
-                      if (variable.name === "requestId" && startValue === "1") {
+
+                      // If this is a file reference and we need to increment requestId,
+                      // we should read the actual value from the file
+                      if (
+                        variable.name === "requestId" &&
+                        spec.requests[0].payload?.template?.includes("@")
+                      ) {
+                        try {
+                          const fs = require("fs");
+                          const path = require("path");
+                          const fileMatch =
+                            spec.requests[0].payload.template.match(/@([^"]+)/);
+                          if (fileMatch) {
+                            const filename = fileMatch[1];
+                            const filePath = path.join(process.cwd(), filename);
+                            if (fs.existsSync(filePath)) {
+                              const fileContent = fs.readFileSync(
+                                filePath,
+                                "utf8"
+                              );
+                              const fileData = JSON.parse(fileContent);
+                              if (fileData.requestId) {
+                                startValue = fileData.requestId;
+                                console.log(
+                                  `📁 Using requestId from file: ${startValue}`
+                                );
+                              }
+                            }
+                          }
+                        } catch (error) {
+                          console.warn(
+                            `⚠️ Could not read requestId from file: ${error}`
+                          );
+                        }
+                      } else if (
+                        variable.name === "requestId" &&
+                        startValue === "1"
+                      ) {
                         startValue = "burst-test-1";
                       }
+
                       return {
                         name: variable.name,
                         type: variable.type,
