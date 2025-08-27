@@ -189,7 +189,10 @@ exports/
 !vitest.integration.config.ts
 !vitest.unit.config.ts
 !config/ai-config.example.json
-!config/ai-config.json
+# AI configuration files (contain API keys)
+config/ai-config.json
+config/ai-config.local.json
+config/ai-config.*.json
 
 # Generated JSON files
 load-test-*.json
