@@ -71,9 +71,15 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
         // Prepare request data
         let requestData: any = undefined;
         if (request.body) {
+          console.log("🔍 Using request.body:", JSON.stringify(request.body));
           requestData = request.body;
         } else if (request.payload) {
+          console.log(
+            "🔍 Using request.payload:",
+            JSON.stringify(request.payload)
+          );
           requestData = this.generateRequestBody(request.payload, i);
+          console.log("🔍 Generated requestData:", JSON.stringify(requestData));
         }
 
         // Only show detailed request info for first request or if verbose
@@ -233,6 +239,32 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
           const fullPath = path.resolve(process.cwd(), filePath);
           body = fs.readFileSync(fullPath, "utf8");
           console.log(`📁 Loaded file: ${filePath}`);
+
+          // If we have variables and this is a file reference, automatically handle requestId incrementing
+          if (payload.variables && payload.variables.length > 0) {
+            const requestIdVar = payload.variables.find(
+              (v: any) => v.name === "requestId"
+            );
+            if (requestIdVar) {
+              // Extract the actual requestId value from the loaded JSON
+              try {
+                const jsonData = JSON.parse(body);
+                if (jsonData.requestId) {
+                  // Update the baseValue to match the actual value in the file
+                  requestIdVar.parameters = requestIdVar.parameters || {};
+                  requestIdVar.parameters.baseValue = jsonData.requestId;
+                  console.log(
+                    `🔧 Updated requestId baseValue to: ${jsonData.requestId}`
+                  );
+                }
+              } catch (parseError) {
+                console.warn(
+                  "⚠️ Could not parse JSON to extract requestId:",
+                  parseError
+                );
+              }
+            }
+          }
         } catch (fileError) {
           console.warn(
             `⚠️ Failed to load file ${filePath}:`,
