@@ -39,9 +39,21 @@ export class APIEnhancer {
         messages.push(payloadEnhancements.message);
       }
     } else {
-      console.log(
-        chalk.blue("🔧 Preserving fallback parser's payload with variables")
-      );
+      // Check if this is an AI-generated payload (has template and variables)
+      if (
+        spec.requests[0].payload.template &&
+        spec.requests[0].payload.variables
+      ) {
+        console.log(
+          chalk.blue(
+            "🔧 AI-generated payload detected - letting executor process template"
+          )
+        );
+      } else {
+        console.log(
+          chalk.blue("🔧 Preserving fallback parser's payload with variables")
+        );
+      }
     }
 
     // 3. URL Enhancement - Detect and enhance URL patterns
