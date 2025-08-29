@@ -189,7 +189,7 @@ export default function() {
       return total + 1;
     }, 0);
 
-    // Generate step definitions
+    // Generate step definitions with load patterns
     const stepDefinitions = steps
       .map((step, index) => {
         // Type guard to check if this is a WorkflowRequest
@@ -205,25 +205,26 @@ export default function() {
         const body = step.body ? JSON.stringify(step.body) : "null";
         const requestCount = step.requestCount || 1;
 
+        // Get the load pattern for this step
+        const stepLoadPattern = step.loadPattern || { type: "constant" };
+        const loadPatternType = stepLoadPattern.type || "constant";
+
+        // Generate step-specific execution logic based on load pattern
+        const stepExecution = this.generateStepExecution(
+          stepLoadPattern,
+          requestCount,
+          method,
+          url,
+          body,
+          headers,
+          index + 1
+        );
+
         return `
-  // Step ${index + 1}: ${method} ${url} (${requestCount} requests)
-  for (let i = 0; i < ${requestCount}; i++) {
-    const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
-    
-    check(response, {
-      'step ${index + 1} status is 200': (r) => r.status === 200,
-      'step ${
-        index + 1
-      } response time < 5000ms': (r) => r.timings.duration < 5000,
-    });
-    
-    errorRate.add(response.status !== 200);
-    
-    // Small delay between requests in the same step
-    if (i < ${requestCount} - 1) {
-      sleep(0.1);
-    }
-  }
+  // Step ${
+    index + 1
+  }: ${method} ${url} (${requestCount} requests, ${loadPatternType} pattern)
+  ${stepExecution}
   
   // Delay between workflow steps
   if (${index} < ${steps.length - 1}) {
@@ -256,6 +257,275 @@ export default function() {
 `;
 
     return script;
+  }
+
+  private generateStepExecution(
+    loadPattern: any,
+    requestCount: number,
+    method: string,
+    url: string,
+    body: string,
+    headers: string,
+    stepNumber: number
+  ): string {
+    const patternType = loadPattern.type || "constant";
+
+    switch (patternType) {
+      case "spike":
+        return this.generateSpikeStep(
+          requestCount,
+          method,
+          url,
+          body,
+          headers,
+          stepNumber,
+          loadPattern
+        );
+      case "ramp-up":
+        return this.generateRampUpStep(
+          requestCount,
+          method,
+          url,
+          body,
+          headers,
+          stepNumber,
+          loadPattern
+        );
+      case "random-burst":
+        return this.generateRandomBurstStep(
+          requestCount,
+          method,
+          url,
+          body,
+          headers,
+          stepNumber,
+          loadPattern
+        );
+      case "step":
+        return this.generateStepPattern(
+          requestCount,
+          method,
+          url,
+          body,
+          headers,
+          stepNumber,
+          loadPattern
+        );
+      default:
+        return this.generateConstantStep(
+          requestCount,
+          method,
+          url,
+          body,
+          headers,
+          stepNumber
+        );
+    }
+  }
+
+  private generateSpikeStep(
+    requestCount: number,
+    method: string,
+    url: string,
+    body: string,
+    headers: string,
+    stepNumber: number,
+    loadPattern: any
+  ): string {
+    const duration = loadPattern.duration?.value || 30;
+    const unit = loadPattern.duration?.unit || "seconds";
+
+    // Convert to seconds
+    let durationSeconds = duration;
+    if (unit === "minutes") durationSeconds = duration * 60;
+    if (unit === "hours") durationSeconds = duration * 3600;
+
+    // Create spike pattern: quick ramp up, peak, quick ramp down
+    const rampUp = Math.max(1, Math.floor(durationSeconds * 0.2)); // 20% ramp up
+    const peak = Math.max(1, Math.floor(durationSeconds * 0.6)); // 60% peak
+    const rampDown = Math.max(1, Math.floor(durationSeconds * 0.2)); // 20% ramp down
+
+    const requestsPerSecond = requestCount / durationSeconds;
+
+    return `
+  // Spike pattern: ${requestCount} requests over ${durationSeconds}s
+  const spikeRequestsPerSecond = ${requestsPerSecond};
+  const spikeDuration = ${durationSeconds};
+  
+  // Ramp up phase (${rampUp}s)
+  for (let i = 0; i < ${Math.floor(requestCount * 0.2)}; i++) {
+    const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+    check(response, {
+      'step ${stepNumber} status is 200': (r) => r.status === 200,
+      'step ${stepNumber} response time < 5000ms': (r) => r.timings.duration < 5000,
+    });
+    errorRate.add(response.status !== 200);
+    sleep(1 / (spikeRequestsPerSecond * 0.5)); // Slower during ramp up
+  }
+  
+  // Peak phase (${peak}s)
+  for (let i = 0; i < ${Math.floor(requestCount * 0.6)}; i++) {
+    const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+    check(response, {
+      'step ${stepNumber} status is 200': (r) => r.status === 200,
+      'step ${stepNumber} response time < 5000ms': (r) => r.timings.duration < 5000,
+    });
+    errorRate.add(response.status !== 200);
+    sleep(1 / spikeRequestsPerSecond); // Full speed during peak
+  }
+  
+  // Ramp down phase (${rampDown}s)
+  for (let i = 0; i < ${Math.floor(requestCount * 0.2)}; i++) {
+    const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+    check(response, {
+      'step ${stepNumber} status is 200': (r) => r.status === 200,
+      'step ${stepNumber} response time < 5000ms': (r) => r.timings.duration < 5000,
+    });
+    errorRate.add(response.status !== 200);
+    sleep(1 / (spikeRequestsPerSecond * 0.5)); // Slower during ramp down
+  }`;
+  }
+
+  private generateRampUpStep(
+    requestCount: number,
+    method: string,
+    url: string,
+    body: string,
+    headers: string,
+    stepNumber: number,
+    loadPattern: any
+  ): string {
+    const duration = loadPattern.duration?.value || 30;
+    const unit = loadPattern.duration?.unit || "seconds";
+
+    // Convert to seconds
+    let durationSeconds = duration;
+    if (unit === "minutes") durationSeconds = duration * 60;
+    if (unit === "hours") durationSeconds = duration * 3600;
+
+    const startUsers = loadPattern.startUsers || 1;
+    const endUsers = loadPattern.endUsers || requestCount;
+
+    return `
+  // Ramp-up pattern: ${requestCount} requests over ${durationSeconds}s (${startUsers} to ${endUsers} users)
+  const rampUpDuration = ${durationSeconds};
+  const startRate = ${startUsers} / rampUpDuration;
+  const endRate = ${endUsers} / rampUpDuration;
+  
+  for (let i = 0; i < ${requestCount}; i++) {
+    const progress = i / ${requestCount};
+    const currentRate = startRate + (endRate - startRate) * progress;
+    
+    const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+    check(response, {
+      'step ${stepNumber} status is 200': (r) => r.status === 200,
+      'step ${stepNumber} response time < 5000ms': (r) => r.timings.duration < 5000,
+    });
+    errorRate.add(response.status !== 200);
+    
+    sleep(1 / currentRate);
+  }`;
+  }
+
+  private generateRandomBurstStep(
+    requestCount: number,
+    method: string,
+    url: string,
+    body: string,
+    headers: string,
+    stepNumber: number,
+    loadPattern: any
+  ): string {
+    return `
+  // Random burst pattern: ${requestCount} requests
+  const burstSizes = [${Math.max(
+    1,
+    Math.floor(requestCount * 0.3)
+  )}, ${Math.max(1, Math.floor(requestCount * 0.5))}, ${Math.max(
+      1,
+      Math.floor(requestCount * 0.2)
+    )}];
+  let requestIndex = 0;
+  
+  for (const burstSize of burstSizes) {
+    // Burst of requests
+    for (let i = 0; i < burstSize && requestIndex < ${requestCount}; i++) {
+      const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+      check(response, {
+        'step ${stepNumber} status is 200': (r) => r.status === 200,
+        'step ${stepNumber} response time < 5000ms': (r) => r.timings.duration < 5000,
+      });
+      errorRate.add(response.status !== 200);
+      requestIndex++;
+    }
+    
+    // Random delay between bursts
+    if (requestIndex < ${requestCount}) {
+      sleep(Math.random() * 2 + 1); // 1-3 second random delay
+    }
+  }`;
+  }
+
+  private generateStepPattern(
+    requestCount: number,
+    method: string,
+    url: string,
+    body: string,
+    headers: string,
+    stepNumber: number,
+    loadPattern: any
+  ): string {
+    const steps = loadPattern.steps || [requestCount];
+
+    return `
+  // Step pattern: ${requestCount} requests in ${steps.length} steps
+  const stepSizes = [${steps.join(", ")}];
+  let requestIndex = 0;
+  
+  for (const stepSize of stepSizes) {
+    // Execute step
+    for (let i = 0; i < stepSize && requestIndex < ${requestCount}; i++) {
+      const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+      check(response, {
+        'step ${stepNumber} status is 200': (r) => r.status === 200,
+        'step ${stepNumber} response time < 5000ms': (r) => r.timings.duration < 5000,
+      });
+      errorRate.add(response.status !== 200);
+      requestIndex++;
+    }
+    
+    // Hold at this level
+    if (requestIndex < ${requestCount}) {
+      sleep(2); // 2 second hold
+    }
+  }`;
+  }
+
+  private generateConstantStep(
+    requestCount: number,
+    method: string,
+    url: string,
+    body: string,
+    headers: string,
+    stepNumber: number
+  ): string {
+    return `
+  // Constant pattern: ${requestCount} requests
+  for (let i = 0; i < ${requestCount}; i++) {
+    const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+    
+    check(response, {
+      'step ${stepNumber} status is 200': (r) => r.status === 200,
+      'step ${stepNumber} response time < 5000ms': (r) => r.timings.duration < 5000,
+    });
+    
+    errorRate.add(response.status !== 200);
+    
+    // Small delay between requests
+    if (i < ${requestCount} - 1) {
+      sleep(0.1);
+    }
+  }`;
   }
 
   private generateOptions(loadPattern: any): string {

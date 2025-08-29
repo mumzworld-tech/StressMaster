@@ -91,6 +91,7 @@ export interface WorkflowRequest {
   extractData?: string[];
   useData?: Record<string, string>;
   requestCount?: number;
+  loadPattern?: LoadPattern; // Per-step load pattern
 }
 
 export interface CorrelationRule {
