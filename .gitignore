@@ -211,6 +211,9 @@ k6-scripts/
 *.k6.results.json
 k6-results/
 
+# Batch load testing files
+batch-load-testing/
+
 # Test payloads and data files
 test-payload.json
 test-data/
