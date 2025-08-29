@@ -79,6 +79,14 @@ export class InteractiveCLI implements CLIInterface {
           continue;
         }
 
+        if (
+          input.toLowerCase() === "help openapi" ||
+          input.toLowerCase() === "openapi help"
+        ) {
+          this.displayOpenAPIHelp();
+          continue;
+        }
+
         if (input.toLowerCase() === "history") {
           this.displayManager.displayHistory();
           continue;
@@ -91,6 +99,12 @@ export class InteractiveCLI implements CLIInterface {
 
         if (input.toLowerCase().startsWith("export ")) {
           await this.handleExportCommand(input.substring(7)); // Remove "export " prefix
+          continue;
+        }
+
+        // Handle OpenAPI commands
+        if (input.toLowerCase().startsWith("openapi ")) {
+          await this.handleOpenAPICommand(input.substring(8)); // Remove "openapi " prefix
           continue;
         }
 
@@ -232,6 +246,22 @@ export class InteractiveCLI implements CLIInterface {
       await parser.initialize();
 
       console.log(chalk.blue("🔍 Parsing natural language command..."));
+
+      // Check if this is an OpenAPI-related command
+      const hasOpenAPIFile =
+        normalizedInput.includes(".yaml") ||
+        normalizedInput.includes(".yml") ||
+        normalizedInput.includes(".json") ||
+        normalizedInput.toLowerCase().includes("openapi");
+
+      if (hasOpenAPIFile) {
+        console.log(
+          chalk.cyan(
+            "📋 Detected OpenAPI specification - AI will analyze the API structure"
+          )
+        );
+      }
+
       const spec = await parser.parseCommand(normalizedInput);
 
       console.log(chalk.green.bold("✅ Command parsed successfully!"));
@@ -386,6 +416,69 @@ export class InteractiveCLI implements CLIInterface {
     }
   }
 
+  public async handleOpenAPICommand(input: string): Promise<void> {
+    try {
+      const { OpenAPICLI } = await import("../../features/openapi/cli");
+      const openapiCLI = new OpenAPICLI();
+
+      const args = input.trim().split(" ");
+      const command = args[0];
+      const filePath = args[1];
+
+      if (!command || !filePath) {
+        console.log(chalk.blue("\n🔧 OpenAPI Commands:"));
+        console.log(
+          chalk.white(`
+  openapi parse <file>                    Parse OpenAPI specification
+  openapi list <file> [options]           List all endpoints
+  openapi payloads <file> [options]       Generate payloads for endpoints
+  openapi curl <file> [baseUrl]           Generate cURL commands
+  
+  Examples:
+    openapi parse api.yaml
+    openapi list api.yaml --method POST
+    openapi payloads api.yaml --tag users
+    openapi curl api.yaml https://api.example.com
+        `)
+        );
+        return;
+      }
+
+      switch (command) {
+        case "parse":
+          await openapiCLI.parseSpec(filePath);
+          break;
+        case "list":
+          const options: any = {};
+          for (let i = 2; i < args.length; i += 2) {
+            if (args[i] === "--method") options.method = args[i + 1];
+            if (args[i] === "--tag") options.tag = args[i + 1];
+            if (args[i] === "--path") options.path = args[i + 1];
+            if (args[i] === "--has-body") options.hasRequestBody = true;
+            if (args[i] === "--no-body") options.hasRequestBody = false;
+          }
+          await openapiCLI.listEndpoints(filePath, options);
+          break;
+        case "payloads":
+          await openapiCLI.generatePayloads(filePath);
+          break;
+        case "curl":
+          const baseUrl = args[2];
+          await openapiCLI.generateCurl(filePath, baseUrl);
+          break;
+        default:
+          console.log(chalk.red(`❌ Unknown OpenAPI command: ${command}`));
+          console.log(chalk.blue('Use "openapi" to see available commands'));
+      }
+    } catch (error) {
+      this.displayManager.displayError(
+        `OpenAPI command failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
   async exportResults(
     results: TestResult,
     format: ExportFormat
@@ -443,5 +536,112 @@ export class InteractiveCLI implements CLIInterface {
     } catch (error) {
       console.warn("⚠️  Could not save test result:", error);
     }
+  }
+
+  private displayOpenAPIHelp(): void {
+    console.log(chalk.blue.bold("\n🔧 OpenAPI Commands Help"));
+    console.log(chalk.gray("=".repeat(50)));
+    console.log();
+
+    console.log(chalk.yellow.bold("📋 Basic Commands:"));
+    console.log(
+      chalk.white(
+        "  openapi parse <file>                    - Parse OpenAPI specification"
+      )
+    );
+    console.log(
+      chalk.white(
+        "  openapi list <file> [options]           - List all endpoints"
+      )
+    );
+    console.log(
+      chalk.white(
+        "  openapi payloads <file> [options]       - Generate payloads for endpoints"
+      )
+    );
+    console.log(
+      chalk.white(
+        "  openapi curl <file> [baseUrl]           - Generate cURL commands"
+      )
+    );
+    console.log();
+
+    console.log(chalk.yellow.bold("🔍 Filtering Options:"));
+    console.log(
+      chalk.white(
+        "  --method <method>                       - Filter by HTTP method (GET, POST, PUT, DELETE)"
+      )
+    );
+    console.log(
+      chalk.white(
+        "  --tag <tag>                            - Filter by tag (users, orders, products)"
+      )
+    );
+    console.log(
+      chalk.white(
+        "  --path <path>                          - Filter by path pattern"
+      )
+    );
+    console.log(
+      chalk.white(
+        "  --has-body                             - Only endpoints with request body"
+      )
+    );
+    console.log(
+      chalk.white(
+        "  --no-body                              - Only endpoints without request body"
+      )
+    );
+    console.log();
+
+    console.log(chalk.yellow.bold("💡 Examples:"));
+    console.log(chalk.gray("  openapi parse api.yaml"));
+    console.log(chalk.gray("  openapi list api.yaml --method POST"));
+    console.log(chalk.gray("  openapi list api.yaml --tag users"));
+    console.log(chalk.gray("  openapi payloads api.yaml --has-body"));
+    console.log(chalk.gray("  openapi curl api.yaml https://api.example.com"));
+    console.log();
+
+    console.log(chalk.yellow.bold("🤖 AI-Powered Testing:"));
+    console.log(
+      chalk.white("  You can also use natural language with OpenAPI files:")
+    );
+    console.log(
+      chalk.gray("  send 10 POST requests to @api.yaml users endpoint")
+    );
+    console.log(
+      chalk.gray(
+        "  load test the products API from @api.yaml with realistic data"
+      )
+    );
+    console.log(
+      chalk.gray("  test all POST endpoints in @api.yaml with 20 requests each")
+    );
+    console.log(
+      chalk.gray(
+        "  spike test the orders API from @api.yaml with 100 requests in 30 seconds"
+      )
+    );
+    console.log();
+
+    console.log(chalk.yellow.bold("🎯 Supported File Formats:"));
+    console.log(chalk.white("  • .yaml files"));
+    console.log(chalk.white("  • .yml files"));
+    console.log(chalk.white("  • .json files"));
+    console.log();
+
+    console.log(chalk.yellow.bold("✨ Features:"));
+    console.log(chalk.white("  • Automatic schema analysis"));
+    console.log(chalk.white("  • Realistic payload generation"));
+    console.log(chalk.white("  • Example-based data creation"));
+    console.log(
+      chalk.white(
+        "  • Support for all field types (strings, numbers, booleans, arrays, objects)"
+      )
+    );
+    console.log(chalk.white("  • Complex nested structures"));
+    console.log(chalk.white("  • Enum values and patterns"));
+    console.log(chalk.white("  • Required vs optional fields"));
+    console.log();
   }
 }

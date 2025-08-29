@@ -50,6 +50,83 @@ export class DisplayManager {
     );
     console.log();
 
+    console.log(chalk.yellow.bold("🔧 OpenAPI Commands:"));
+    console.log(
+      chalk.gray(
+        "  openapi parse <file>                    - Parse OpenAPI specification"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  openapi list <file> [options]           - List all endpoints"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  openapi payloads <file> [options]       - Generate payloads for endpoints"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  openapi curl <file> [baseUrl]           - Generate cURL commands"
+      )
+    );
+    console.log();
+
+    console.log(chalk.yellow.bold("🔧 OpenAPI Options:"));
+    console.log(
+      chalk.gray(
+        "  --method <method>                       - Filter by HTTP method (GET, POST, etc.)"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  --tag <tag>                            - Filter by tag (users, orders, etc.)"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  --path <path>                          - Filter by path pattern"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  --has-body                             - Only endpoints with request body"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  --no-body                              - Only endpoints without request body"
+      )
+    );
+    console.log();
+
+    console.log(chalk.yellow.bold("🔧 OpenAPI Examples:"));
+    console.log(chalk.gray("  openapi parse api.yaml"));
+    console.log(chalk.gray("  openapi list api.yaml --method POST"));
+    console.log(chalk.gray("  openapi payloads api.yaml --tag users"));
+    console.log(chalk.gray("  openapi curl api.yaml https://api.example.com"));
+    console.log();
+
+    console.log(chalk.yellow.bold("🤖 AI-Powered OpenAPI Testing:"));
+    console.log(
+      chalk.gray("  send 10 POST requests to @api.yaml users endpoint")
+    );
+    console.log(
+      chalk.gray(
+        "  load test the products API from @api.yaml with realistic data"
+      )
+    );
+    console.log(
+      chalk.gray("  test all POST endpoints in @api.yaml with 20 requests each")
+    );
+    console.log(
+      chalk.gray(
+        "  spike test the orders API from @api.yaml with 100 requests in 30 seconds"
+      )
+    );
+    console.log();
+
     console.log(chalk.yellow.bold("💡 Tips:"));
     console.log(
       chalk.gray("  • Use natural language to describe your load test")
@@ -60,6 +137,14 @@ export class DisplayManager {
     );
     console.log(
       chalk.gray("  • Add 'increment field_name' for dynamic values")
+    );
+    console.log(
+      chalk.gray("  • Use @filename.yaml to reference OpenAPI specs")
+    );
+    console.log(
+      chalk.gray(
+        "  • AI will automatically analyze OpenAPI files and generate realistic payloads"
+      )
     );
     console.log();
   }
@@ -98,6 +183,11 @@ export class DisplayManager {
       "Load test 200 POST requests with random user data",
       "Endurance test at 10 RPS for 30 minutes",
       "Send 50 PUT requests with JSON payload to https://api.example.com/items",
+      "send 10 POST requests to @api.yaml users endpoint",
+      "load test the products API from @api.yaml with realistic data",
+      "test all POST endpoints in @api.yaml with 20 requests each",
+      "openapi parse api.yaml",
+      "openapi payloads api.yaml --tag users",
       "Volume test with 500 requests to https://api.example.com/search",
       "Baseline test with 10 requests to https://api.example.com/health",
       "Send 25 DELETE requests to https://api.example.com/items/123",
