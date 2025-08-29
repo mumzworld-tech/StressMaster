@@ -9,7 +9,13 @@ export type HttpMethod =
   | "HEAD"
   | "OPTIONS";
 
-export type TestType = "spike" | "stress" | "endurance" | "volume" | "baseline";
+export type TestType =
+  | "spike"
+  | "stress"
+  | "endurance"
+  | "volume"
+  | "baseline"
+  | "workflow";
 
 export type LoadPatternType =
   | "constant"

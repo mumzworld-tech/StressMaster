@@ -56,22 +56,34 @@ Your task is to parse user commands and extract:
 - Test duration and virtual users
 - Test type (baseline, spike, stress, endurance, volume)
 
-SPECIAL HANDLING:
-1. OpenAPI Files: If the command mentions an OpenAPI spec file (.yaml, .yml, .json), analyze it and generate appropriate payloads
-2. Dynamic Payloads: Generate realistic test data based on the API schema, not hardcoded values
-3. Multiple Endpoints: If testing multiple endpoints, create separate requests for each
+WORKFLOW SUPPORT:
+- Understand natural language patterns for sequences (first, then, next, finally, start by, etc.)
+- Recognize parallel execution (and, also, at the same time, simultaneously, etc.)
+- Handle data dependencies between steps (with data from step X, using response from previous step, etc.)
+- Support mixed sequential and parallel workflows
+- Accept ANY format: bullet points (•), commas, semicolons, newlines, or plain text
+- Be flexible with input structure - adapt to user's natural way of writing
+
+PAYLOAD SOURCES (All Supported):
+1. OpenAPI Files: @api.yaml, @spec.yml, @openapi.json
+2. JSON Files: @payload.json, @data.json, @template.json
+3. Inline JSON: {"key": "value"}, [{"item": "data"}]
+4. Natural Language: "user data", "random items", "test payload"
+5. Mixed Sources: Combine any of the above
 
 RULES:
-1. Respond with ONLY valid JSON
-2. Use exact URLs and methods from the command
-3. For file references like "@filename.json", use that as the payload template
-4. For OpenAPI files, generate dynamic payloads based on the schema
-5. For incrementing fields, add them to an incrementFields array
-6. Keep load patterns simple - just set type and virtualUsers
-7. Default to POST for requests with payloads, GET otherwise
-8. Generate realistic test data (names, emails, IDs, etc.) instead of hardcoded values
+- Respond with ONLY valid JSON
+- Use exact URLs and methods from the command
+- For file references like "@filename.json", use that as the payload template
+- For OpenAPI files, generate dynamic payloads based on the schema
+- For incrementing fields, add them to an incrementFields array
+- Keep load patterns simple - just set type and virtualUsers
+- Default to POST for requests with payloads, GET otherwise
+- Generate realistic test data (names, emails, IDs, etc.) instead of hardcoded values
+- For workflows, create a "workflow" array with steps
+- Be flexible with workflow structure - adapt to the user's intent
 
-EXAMPLE OUTPUT:
+SINGLE REQUEST OUTPUT:
     {
       "method": "POST",
       "url": "http://api.example.com/endpoint",
@@ -80,6 +92,30 @@ EXAMPLE OUTPUT:
       "loadPattern": {"type": "constant", "virtualUsers": 5},
       "duration": {"value": 60, "unit": "seconds"},
       "incrementFields": ["requestId"]
+    }
+
+WORKFLOW OUTPUT:
+    {
+      "workflow": [
+        {
+          "type": "sequential",
+          "steps": [
+            {
+              "method": "GET",
+              "url": "http://api.example.com/users",
+              "requestCount": 1
+            },
+            {
+              "method": "POST",
+              "url": "http://api.example.com/orders",
+              "body": {"userId": "{{step1.userId}}", "items": [{"name": "Product 1"}]},
+              "requestCount": 1
+            }
+          ]
+        }
+      ],
+      "loadPattern": {"type": "constant", "virtualUsers": 1},
+      "duration": {"value": 30, "unit": "seconds"}
     }
 
 IMPORTANT: Generate ACTUAL values, not faker templates. Use realistic data like "John Doe", "john@example.com", 30, etc. Do NOT use {{faker.name.fullName}} or similar templates.`;
@@ -91,6 +127,173 @@ Command: "{input}"
 Respond with only valid JSON, no additional text or explanation.`;
 
   private static readonly EXAMPLES: PromptExample[] = [
+    // Workflow Examples
+    {
+      input:
+        "first GET https://api.example.com/users, then POST https://api.example.com/orders",
+      output: {
+        id: "workflow_" + Date.now(),
+        name: "User Order Workflow",
+        description: "Simple sequential workflow: get users, create order",
+        testType: "workflow",
+        requests: [], // Empty for workflow tests
+        workflow: [
+          {
+            type: "sequential",
+            steps: [
+              {
+                method: "GET",
+                url: "https://api.example.com/users",
+                requestCount: 1,
+              },
+              {
+                method: "POST",
+                url: "https://api.example.com/orders",
+                body: { userId: "user123", items: [{ name: "Product 1" }] },
+                requestCount: 1,
+              },
+            ],
+          },
+        ],
+        loadPattern: { type: "constant", virtualUsers: 1 },
+        duration: { value: 30, unit: "seconds" },
+      },
+      description: "Simple sequential workflow",
+    },
+    {
+      input:
+        "• GET https://api.example.com/users\n• POST https://api.example.com/orders",
+      output: {
+        id: "workflow_" + Date.now(),
+        name: "Bullet Point Workflow",
+        description: "Workflow with bullet point format",
+        testType: "workflow",
+        requests: [], // Empty for workflow tests
+        workflow: [
+          {
+            type: "sequential",
+            steps: [
+              {
+                method: "GET",
+                url: "https://api.example.com/users",
+                requestCount: 1,
+              },
+              {
+                method: "POST",
+                url: "https://api.example.com/orders",
+                body: { userId: "user123", items: [{ name: "Product 1" }] },
+                requestCount: 1,
+              },
+            ],
+          },
+        ],
+        loadPattern: { type: "constant", virtualUsers: 1 },
+        duration: { value: 30, unit: "seconds" },
+      },
+      description: "Bullet point workflow format",
+    },
+    {
+      input:
+        "GET https://api.example.com/users; POST https://api.example.com/orders",
+      output: {
+        id: "workflow_" + Date.now(),
+        name: "Semicolon Workflow",
+        description: "Workflow with semicolon separator",
+        testType: "workflow",
+        requests: [], // Empty for workflow tests
+        workflow: [
+          {
+            type: "sequential",
+            steps: [
+              {
+                method: "GET",
+                url: "https://api.example.com/users",
+                requestCount: 1,
+              },
+              {
+                method: "POST",
+                url: "https://api.example.com/orders",
+                body: { userId: "user123", items: [{ name: "Product 1" }] },
+                requestCount: 1,
+              },
+            ],
+          },
+        ],
+        loadPattern: { type: "constant", virtualUsers: 1 },
+        duration: { value: 30, unit: "seconds" },
+      },
+      description: "Semicolon separated workflow",
+    },
+    {
+      input:
+        "start by getting auth token, then fetch products and categories, then create order",
+      output: {
+        id: "workflow_" + Date.now(),
+        name: "Auth Product Order Workflow",
+        description: "Sequential workflow with auth, products, and order",
+        testType: "workflow",
+        requests: [], // Empty for workflow tests
+        workflow: [
+          {
+            type: "sequential",
+            steps: [
+              {
+                method: "GET",
+                url: "https://api.example.com/auth/token",
+                requestCount: 1,
+              },
+              {
+                method: "GET",
+                url: "https://api.example.com/products",
+                requestCount: 1,
+              },
+              {
+                method: "POST",
+                url: "https://api.example.com/orders",
+                body: { productId: "prod123", token: "auth123" },
+                requestCount: 1,
+              },
+            ],
+          },
+        ],
+        loadPattern: { type: "constant", virtualUsers: 1 },
+        duration: { value: 30, unit: "seconds" },
+      },
+      description: "Simple sequential workflow",
+    },
+    {
+      input:
+        'first GET https://httpbin.org/get, then POST https://httpbin.org/post with {"test": "workflow"}',
+      output: {
+        id: "workflow_" + Date.now(),
+        name: "Simple Workflow Test",
+        description: "Simple sequential workflow with GET then POST",
+        testType: "workflow",
+        requests: [], // Empty for workflow tests
+        workflow: [
+          {
+            type: "sequential",
+            steps: [
+              {
+                method: "GET",
+                url: "https://httpbin.org/get",
+                requestCount: 1,
+              },
+              {
+                method: "POST",
+                url: "https://httpbin.org/post",
+                body: { test: "workflow" },
+                requestCount: 1,
+              },
+            ],
+          },
+        ],
+        loadPattern: { type: "constant", virtualUsers: 1 },
+        duration: { value: 30, unit: "seconds" },
+      },
+      description: "Simple sequential workflow",
+    },
+    // Single Request Examples
     {
       input:
         'send 3 POST requests to http://backbone.mumz.io/magento/qcomm-order with header x-api-key 2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9 and body {"requestId": "demo-testing—10", "payload": [{"externalId": "ord#1"}]} increment requestId',

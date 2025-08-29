@@ -13,11 +13,11 @@ export interface LoadTestSpec {
   testType: TestType;
 
   requests: RequestSpec[];
+  workflow?: WorkflowStep[];
   loadPattern: LoadPattern;
   duration: Duration;
 
   // For multi-step scenarios
-  workflow?: WorkflowStep[];
   dataCorrelation?: CorrelationRule[];
 }
 
@@ -73,12 +73,25 @@ export interface VariableDefinition {
 }
 
 export interface WorkflowStep {
-  id: string;
-  name: string;
-  request: RequestSpec;
+  id?: string;
+  name?: string;
+  type: "sequential" | "parallel";
+  steps: (WorkflowRequest | WorkflowStep)[];
   thinkTime?: Duration;
   conditions?: StepCondition[];
-  dataExtraction?: DataExtraction[];
+}
+
+export interface WorkflowRequest {
+  method: HttpMethod;
+  url: string;
+  headers?: Record<string, string>;
+  body?: any;
+  payload?: PayloadSpec;
+  validation?: ResponseValidation[];
+  extractData?: string[];
+  useData?: Record<string, string>;
+  requestCount?: number;
+  loadPattern?: LoadPattern; // Per-step load pattern
 }
 
 export interface CorrelationRule {
