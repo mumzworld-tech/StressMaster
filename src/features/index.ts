@@ -9,3 +9,6 @@ export * from "./execution";
 
 // Common utilities
 export * from "./common";
+
+// OpenAPI features
+export * from "./openapi";
