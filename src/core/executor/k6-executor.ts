@@ -3,6 +3,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
+import { MediaProcessor } from "../../features/common/media-utils";
 
 const execAsync = promisify(exec);
 
@@ -131,11 +132,13 @@ export class K6LoadExecutor implements K6Executor {
     // Original single request logic
     const request = spec.requests[0];
     const loadPattern = spec.loadPattern;
+    const payloadResult = this.generatePayload(request);
 
     let script = `
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
+${payloadResult.imports ? payloadResult.imports : ""}
 
 const errorRate = new Rate('errors');
 
@@ -152,7 +155,7 @@ export default function() {
   const method = '${request.method}';
   const headers = ${JSON.stringify(request.headers || {})};
   
-  ${this.generatePayload(request)}
+  ${payloadResult.payloadCode}
   
   const response = http.request(method, url, payload, { headers });
   
@@ -189,6 +192,12 @@ export default function() {
       return total + 1;
     }, 0);
 
+    // Collect all imports from media payloads
+    const allImports = new Set<string>();
+    allImports.add("import http from 'k6/http';");
+    allImports.add("import { check, sleep } from 'k6';");
+    allImports.add("import { Rate } from 'k6/metrics';");
+
     // Generate step definitions with load patterns
     const stepDefinitions = steps
       .map((step, index) => {
@@ -209,6 +218,11 @@ export default function() {
         const stepLoadPattern = step.loadPattern || { type: "constant" };
         const loadPatternType = stepLoadPattern.type || "constant";
 
+        // Check for media imports
+        if (step.media && step.media.files && step.media.files.length > 0) {
+          allImports.add("import { SharedArray } from 'k6/data';");
+        }
+
         // Generate step-specific execution logic based on load pattern
         const stepExecution = this.generateStepExecution(
           stepLoadPattern,
@@ -217,7 +231,8 @@ export default function() {
           url,
           body,
           headers,
-          index + 1
+          index + 1,
+          step.media
         );
 
         return `
@@ -234,9 +249,7 @@ export default function() {
       .join("");
 
     let script = `
-import http from 'k6/http';
-import { check, sleep } from 'k6';
-import { Rate } from 'k6/metrics';
+${Array.from(allImports).join("\n")}
 
 const errorRate = new Rate('errors');
 
@@ -266,7 +279,8 @@ export default function() {
     url: string,
     body: string,
     headers: string,
-    stepNumber: number
+    stepNumber: number,
+    media?: any
   ): string {
     const patternType = loadPattern.type || "constant";
 
@@ -279,7 +293,8 @@ export default function() {
           body,
           headers,
           stepNumber,
-          loadPattern
+          loadPattern,
+          media
         );
       case "ramp-up":
         return this.generateRampUpStep(
@@ -289,7 +304,8 @@ export default function() {
           body,
           headers,
           stepNumber,
-          loadPattern
+          loadPattern,
+          media
         );
       case "random-burst":
         return this.generateRandomBurstStep(
@@ -299,7 +315,8 @@ export default function() {
           body,
           headers,
           stepNumber,
-          loadPattern
+          loadPattern,
+          media
         );
       case "step":
         return this.generateStepPattern(
@@ -309,16 +326,18 @@ export default function() {
           body,
           headers,
           stepNumber,
-          loadPattern
+          loadPattern,
+          media
         );
       default:
         return this.generateConstantStep(
-          requestCount,
           method,
           url,
+          requestCount,
           body,
           headers,
-          stepNumber
+          stepNumber,
+          media
         );
     }
   }
@@ -330,7 +349,8 @@ export default function() {
     body: string,
     headers: string,
     stepNumber: number,
-    loadPattern: any
+    loadPattern: any,
+    media?: any
   ): string {
     const duration = loadPattern.duration?.value || 30;
     const unit = loadPattern.duration?.unit || "seconds";
@@ -393,7 +413,8 @@ export default function() {
     body: string,
     headers: string,
     stepNumber: number,
-    loadPattern: any
+    loadPattern: any,
+    media?: any
   ): string {
     const duration = loadPattern.duration?.value || 30;
     const unit = loadPattern.duration?.unit || "seconds";
@@ -434,7 +455,8 @@ export default function() {
     body: string,
     headers: string,
     stepNumber: number,
-    loadPattern: any
+    loadPattern: any,
+    media?: any
   ): string {
     return `
   // Random burst pattern: ${requestCount} requests
@@ -473,7 +495,8 @@ export default function() {
     body: string,
     headers: string,
     stepNumber: number,
-    loadPattern: any
+    loadPattern: any,
+    media?: any
   ): string {
     const steps = loadPattern.steps || [requestCount];
 
@@ -502,17 +525,29 @@ export default function() {
   }
 
   private generateConstantStep(
-    requestCount: number,
     method: string,
     url: string,
+    requestCount: number,
     body: string,
     headers: string,
-    stepNumber: number
+    stepNumber: number,
+    media?: any
   ): string {
+    // Generate payload code for media files
+    let payloadCode = "";
+    if (media && media.files && media.files.length > 0) {
+      const mediaResult = this.generateMediaPayload(media);
+      payloadCode = mediaResult.payloadCode;
+    } else {
+      payloadCode = `const payload = ${body};`;
+    }
+
     return `
   // Constant pattern: ${requestCount} requests
+  ${payloadCode}
+  
   for (let i = 0; i < ${requestCount}; i++) {
-    const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+    const response = http.request('${method}', '${url}', payload, { headers: ${headers} });
     
     check(response, {
       'step ${stepNumber} status is 200': (r) => r.status === 200,
@@ -620,21 +655,35 @@ export default function() {
 ]`;
   }
 
-  private generatePayload(request: any): string {
+  private generatePayload(request: any): {
+    imports: string;
+    payloadCode: string;
+  } {
+    // Handle media files first
+    if (
+      request.media &&
+      request.media.files &&
+      request.media.files.length > 0
+    ) {
+      return this.generateMediaPayload(request.media);
+    }
+
     if (!request.payload) {
-      return "const payload = null;";
+      return { imports: "", payloadCode: "const payload = null;" };
     }
 
     // For file-based payloads, we need to handle them differently in K6
     if (request.payload.template && request.payload.template.startsWith("@")) {
-      return `
-import { SharedArray } from 'k6/data';
+      return {
+        imports: `import { SharedArray } from 'k6/data';`,
+        payloadCode: `
 const payloadData = new SharedArray('payload', function() {
   return JSON.parse(open('${request.payload.template.substring(1)}'));
 });
 
 const payload = JSON.stringify(payloadData[__VU % payloadData.length]);
-`;
+`,
+      };
     }
 
     // Handle bulk data and dynamic variables
@@ -651,10 +700,71 @@ const payload = JSON.stringify(payloadData[__VU % payloadData.length]);
       );
     }
 
-    return `
+    return {
+      imports: "",
+      payloadCode: `
 ${variableDefinitions}
 const payload = ${JSON.stringify(payloadTemplate)};
+`,
+    };
+  }
+
+  private generateMediaPayload(media: any): {
+    imports: string;
+    payloadCode: string;
+  } {
+    const files = media.files || [];
+    const formData = media.formData || {};
+
+    let imports = "";
+    let payloadCode = "";
+
+    // Generate file handling code
+    if (files.length > 0) {
+      imports = `import { SharedArray } from 'k6/data';`;
+
+      const fileDataCode = `
+const fileData = new SharedArray('files', function() {
+  return [
+${files
+  .map(
+    (file: any) =>
+      `    { fieldName: '${file.fieldName}', filePath: '${file.filePath}' }`
+  )
+  .join(",\n")}
+  ];
+});
+
+const currentFile = fileData[__VU % fileData.length];
+const fileBuffer = open(currentFile.filePath, 'b'); // Read as binary
 `;
+
+      // Generate form data code
+      if (Object.keys(formData).length > 0) {
+        payloadCode += `
+const formData = ${JSON.stringify(formData)};
+`;
+      }
+
+      // Generate FormData construction
+      payloadCode += `
+${fileDataCode}
+const payload = new FormData();
+${files
+  .map(
+    (file: any) =>
+      `payload.append('${file.fieldName}', fileBuffer, '${file.filePath
+        .split("/")
+        .pop()}');`
+  )
+  .join("\n")}
+${Object.keys(formData)
+  .map((key) => `payload.append('${key}', JSON.stringify(formData['${key}']));`)
+  .join("\n")}
+`;
+    }
+
+    return { imports, payloadCode };
   }
 
   private generateVariableDefinitions(variables: any[]): string {

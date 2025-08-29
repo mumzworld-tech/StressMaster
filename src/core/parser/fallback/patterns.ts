@@ -10,6 +10,8 @@ export interface FallbackParsingRules {
   headerPatterns: RegExp[];
   bodyPatterns: RegExp[];
   loadPatterns: RegExp[];
+  workflowPatterns: RegExp[];
+  openapiPatterns: RegExp[];
 }
 
 export const FALLBACK_PARSING_RULES: FallbackParsingRules = {
@@ -62,6 +64,21 @@ export const FALLBACK_PARSING_RULES: FallbackParsingRules = {
     /for\s+(\d+)\s*m(?:in)?/gi,
     /(\d+)m\b/gi,
   ],
+  workflowPatterns: [
+    // Sequential workflow patterns
+    /(?:first|start|begin)\s+(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s*,?\s*then\s+(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/gi,
+    /(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s*;\s*(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/gi,
+    /(?:•\s*|\*\s*|\d+\.\s*)(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s*\n\s*(?:•\s*|\*\s*|\d+\.\s*)(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/gi,
+    // Parallel workflow patterns
+    /(?:parallel|simultaneously|at\s+the\s+same\s+time)\s*:\s*(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s*,\s*(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/gi,
+    /(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s+and\s+(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/gi,
+  ],
+  openapiPatterns: [
+    // OpenAPI file patterns
+    /(?:with|using|from)\s+@([^\s,]+\.(?:yaml|yml|json))/gi,
+    /(?:openapi|api\s+spec|swagger)\s*:\s*@([^\s,]+\.(?:yaml|yml|json))/gi,
+    /@([^\s,]+\.(?:yaml|yml|json))/gi,
+  ],
 };
 
 export const PARSING_PATTERNS = [
@@ -82,6 +99,76 @@ export const PARSING_PATTERNS = [
       count: parseInt(match[1]),
       method: match[2].toUpperCase(),
       url: match[3].trim(),
+    }),
+  },
+  {
+    name: "sequential-workflow",
+    pattern:
+      /(?:first|start|begin)\s+(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s*,?\s*then\s+(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/i,
+    extract: (match: RegExpMatchArray) => ({
+      type: "sequential",
+      steps: [
+        { method: match[1].toUpperCase(), url: match[2].trim() },
+        ...(match[3]
+          ? [{ method: match[3].toUpperCase(), url: match[4].trim() }]
+          : []),
+      ],
+    }),
+  },
+  {
+    name: "semicolon-workflow",
+    pattern:
+      /(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s*;\s*(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/i,
+    extract: (match: RegExpMatchArray) => ({
+      type: "sequential",
+      steps: [
+        { method: match[1].toUpperCase(), url: match[2].trim() },
+        ...(match[3]
+          ? [{ method: match[3].toUpperCase(), url: match[4].trim() }]
+          : []),
+      ],
+    }),
+  },
+  {
+    name: "bullet-point-workflow",
+    pattern:
+      /(?:•\s*|\*\s*|\d+\.\s*)(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s*\n\s*(?:•\s*|\*\s*|\d+\.\s*)(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/i,
+    extract: (match: RegExpMatchArray) => ({
+      type: "sequential",
+      steps: [
+        { method: match[1].toUpperCase(), url: match[2].trim() },
+        ...(match[3]
+          ? [{ method: match[3].toUpperCase(), url: match[4].trim() }]
+          : []),
+      ],
+    }),
+  },
+  {
+    name: "parallel-workflow",
+    pattern:
+      /(?:parallel|simultaneously|at\s+the\s+same\s+time)\s*:\s*(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s*,\s*(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/i,
+    extract: (match: RegExpMatchArray) => ({
+      type: "parallel",
+      steps: [
+        { method: match[1].toUpperCase(), url: match[2].trim() },
+        ...(match[3]
+          ? [{ method: match[3].toUpperCase(), url: match[4].trim() }]
+          : []),
+      ],
+    }),
+  },
+  {
+    name: "and-workflow",
+    pattern:
+      /(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+)(?:\s+and\s+(GET|POST|PUT|DELETE|PATCH)\s+([^\s,]+))*/i,
+    extract: (match: RegExpMatchArray) => ({
+      type: "parallel",
+      steps: [
+        { method: match[1].toUpperCase(), url: match[2].trim() },
+        ...(match[3]
+          ? [{ method: match[3].toUpperCase(), url: match[4].trim() }]
+          : []),
+      ],
     }),
   },
   {

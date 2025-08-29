@@ -52,6 +52,7 @@ Your task is to parse user commands and extract:
 - HTTP method (GET, POST, PUT, DELETE, etc.)
 - Target URL
 - Request payload (if any)
+- Media files for upload (if any)
 - Load pattern (constant, ramp-up, spike, step)
 - Test duration and virtual users
 - Test type (baseline, spike, stress, endurance, volume)
@@ -64,21 +65,30 @@ WORKFLOW SUPPORT:
 - Accept ANY format: bullet points (•), commas, semicolons, newlines, or plain text
 - Be flexible with input structure - adapt to user's natural way of writing
 
+MEDIA SUPPORT:
+- Recognize file upload patterns: "file: @image.jpg", "avatar: @photo.png"
+- Support multiple files: "files: @doc1.pdf, @doc2.docx"
+- Handle mixed data and files: "avatar: @photo.png and data: {"name": "John"}"
+- Support various file types: images, documents, archives, audio, video
+- Use appropriate content types: multipart/form-data for multiple files, binary for single files
+
 PAYLOAD SOURCES (All Supported):
 1. OpenAPI Files: @api.yaml, @spec.yml, @openapi.json
 2. JSON Files: @payload.json, @data.json, @template.json
 3. Inline JSON: {"key": "value"}, [{"item": "data"}]
 4. Natural Language: "user data", "random items", "test payload"
-5. Mixed Sources: Combine any of the above
+5. Media Files: @image.jpg, @document.pdf, @video.mp4
+6. Mixed Sources: Combine any of the above
 
 RULES:
 - Respond with ONLY valid JSON
 - Use exact URLs and methods from the command
 - For file references like "@filename.json", use that as the payload template
+- For media files like "file: @image.jpg", add to media.files array
 - For OpenAPI files, generate dynamic payloads based on the schema
 - For incrementing fields, add them to an incrementFields array
 - Keep load patterns simple - just set type and virtualUsers
-- Default to POST for requests with payloads, GET otherwise
+- Default to POST for requests with payloads or media, GET otherwise
 - Generate realistic test data (names, emails, IDs, etc.) instead of hardcoded values
 - For workflows, create a "workflow" array with steps
 - Be flexible with workflow structure - adapt to the user's intent
@@ -88,6 +98,15 @@ SINGLE REQUEST OUTPUT:
       "method": "POST",
       "url": "http://api.example.com/endpoint",
       "body": {"name": "John Doe", "email": "john@example.com", "age": 30},
+      "media": {
+        "files": [
+          {
+            "fieldName": "avatar",
+            "filePath": "photo.png"
+          }
+        ],
+        "formData": {"description": "User profile"}
+      },
       "requestCount": 10,
       "loadPattern": {"type": "constant", "virtualUsers": 5},
       "duration": {"value": 60, "unit": "seconds"},
@@ -292,6 +311,95 @@ Respond with only valid JSON, no additional text or explanation.`;
         duration: { value: 30, unit: "seconds" },
       },
       description: "Simple sequential workflow",
+    },
+    {
+      input: "POST /upload with file: @image.jpg",
+      output: {
+        id: "media_" + Date.now(),
+        name: "Single File Upload",
+        description: "Upload single image file",
+        testType: "baseline",
+        requests: [
+          {
+            method: "POST",
+            url: "https://api.example.com/upload",
+            media: {
+              files: [
+                {
+                  fieldName: "file",
+                  filePath: "image.jpg",
+                },
+              ],
+              contentType: "multipart/form-data",
+            },
+          },
+        ],
+        loadPattern: { type: "constant", virtualUsers: 1 },
+        duration: { value: 30, unit: "seconds" },
+      },
+      description: "Single file upload",
+    },
+    {
+      input:
+        'POST /documents with files: @doc1.pdf, @doc2.docx and data: {"category": "legal"}',
+      output: {
+        id: "media_" + Date.now(),
+        name: "Multiple File Upload",
+        description: "Upload multiple documents with metadata",
+        testType: "baseline",
+        requests: [
+          {
+            method: "POST",
+            url: "https://api.example.com/documents",
+            media: {
+              files: [
+                {
+                  fieldName: "files",
+                  filePath: "doc1.pdf",
+                },
+                {
+                  fieldName: "files",
+                  filePath: "doc2.docx",
+                },
+              ],
+              formData: { category: "legal" },
+              contentType: "multipart/form-data",
+            },
+          },
+        ],
+        loadPattern: { type: "constant", virtualUsers: 1 },
+        duration: { value: 30, unit: "seconds" },
+      },
+      description: "Multiple file upload with metadata",
+    },
+    {
+      input:
+        'POST /profile with avatar: @photo.png and data: {"name": "John", "email": "john@example.com"}',
+      output: {
+        id: "media_" + Date.now(),
+        name: "Profile Upload",
+        description: "Upload profile with avatar and user data",
+        testType: "baseline",
+        requests: [
+          {
+            method: "POST",
+            url: "https://api.example.com/profile",
+            media: {
+              files: [
+                {
+                  fieldName: "avatar",
+                  filePath: "photo.png",
+                },
+              ],
+              formData: { name: "John", email: "john@example.com" },
+              contentType: "multipart/form-data",
+            },
+          },
+        ],
+        loadPattern: { type: "constant", virtualUsers: 1 },
+        duration: { value: 30, unit: "seconds" },
+      },
+      description: "File upload with form data",
     },
     // Single Request Examples
     {

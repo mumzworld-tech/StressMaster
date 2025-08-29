@@ -12,3 +12,6 @@ export * from "./common";
 
 // OpenAPI features
 export * from "./openapi";
+
+// Media support features
+export * from "./common/media-utils";

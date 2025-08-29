@@ -2,6 +2,7 @@ import axios, { AxiosResponse } from "axios";
 import { LoadTestSpec, TestResult, PerformanceMetrics } from "../../types";
 import chalk from "chalk";
 import { generateTestId } from "../../features/common/string-utils";
+import { MediaProcessor } from "../../features/common/media-utils";
 
 export interface SimpleHttpExecutor {
   executeLoadTest(spec: LoadTestSpec): Promise<TestResult>;
@@ -70,26 +71,58 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
 
         // Prepare request data
         let requestData: any = undefined;
+        let requestHeaders = { ...(request.headers || {}) };
 
-        // Normalize: if body is a string like "@file.json", convert to payload template
-        if (
-          request.body &&
-          typeof request.body === "string" &&
-          request.body.startsWith("@") &&
-          !request.payload
-        ) {
-          request.payload = {
-            template: request.body,
-            // carry variables if present at request level (or leave empty)
-            variables: (request as any).variables || [],
-          } as any;
-          delete request.body;
-        }
+        // Process media files if present
+        if (request.media) {
+          try {
+            const processedMedia = MediaProcessor.processMedia(request.media);
+            if (processedMedia.hasFiles) {
+              // Use FormData for file uploads
+              const FormData = require("form-data");
+              const formData = new FormData();
 
-        if (request.body) {
-          requestData = request.body;
-        } else if (request.payload) {
-          requestData = this.generateRequestBody(request.payload, i);
+              // Add files to form data
+              Object.keys(processedMedia.formData).forEach((key) => {
+                const field = processedMedia.formData[key];
+                if (field.value && field.options) {
+                  // This is a file
+                  formData.append(key, field.value, field.options);
+                } else {
+                  // This is regular form data
+                  formData.append(key, field);
+                }
+              });
+
+              requestData = formData;
+              // FormData will set its own Content-Type with boundary
+              delete requestHeaders["Content-Type"];
+            }
+          } catch (error) {
+            console.error(`❌ Media processing failed:`, error);
+            throw error;
+          }
+        } else {
+          // Normalize: if body is a string like "@file.json", convert to payload template
+          if (
+            request.body &&
+            typeof request.body === "string" &&
+            request.body.startsWith("@") &&
+            !request.payload
+          ) {
+            request.payload = {
+              template: request.body,
+              // carry variables if present at request level (or leave empty)
+              variables: (request as any).variables || [],
+            } as any;
+            delete request.body;
+          }
+
+          if (request.body) {
+            requestData = request.body;
+          } else if (request.payload) {
+            requestData = this.generateRequestBody(request.payload, i);
+          }
         }
 
         // Only show detailed request info for first request or if verbose
@@ -105,7 +138,7 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
           method: request.method.toLowerCase() as any,
           url: normalizedUrl,
           data: requestData,
-          headers: request.headers || {},
+          headers: requestHeaders,
           timeout: 30000,
           validateStatus: () => true,
         });
@@ -184,13 +217,34 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
       console.log(`   Headers: ${chalk.gray(JSON.stringify(request.headers))}`);
     }
 
-    if (requestData) {
+    // Display media information if present
+    if (request.media && request.media.files) {
+      console.log(`   📁 Media Files:`);
+      request.media.files.forEach((file: any, index: number) => {
+        console.log(
+          `      ${index + 1}. ${file.fieldName}: ${chalk.green(file.filePath)}`
+        );
+      });
+      if (request.media.formData) {
+        console.log(
+          `   📝 Form Data: ${chalk.gray(
+            JSON.stringify(request.media.formData)
+          )}`
+        );
+      }
+    }
+
+    if (requestData && !request.media) {
       const bodyStr = JSON.stringify(requestData);
       if (bodyStr.length > 100) {
         console.log(`   Body: ${chalk.gray(bodyStr.substring(0, 97) + "...")}`);
       } else {
         console.log(`   Body: ${chalk.gray(bodyStr)}`);
       }
+    } else if (requestData && request.media) {
+      console.log(
+        `   📦 FormData: ${chalk.gray("Multipart form data with files")}`
+      );
     }
     console.log();
   }

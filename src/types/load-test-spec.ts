@@ -27,6 +27,7 @@ export interface RequestSpec {
   headers?: Record<string, string>;
   body?: any;
   payload?: PayloadSpec;
+  media?: MediaSpec; // Media files for upload
   validation?: ResponseValidation[];
 }
 
@@ -87,6 +88,7 @@ export interface WorkflowRequest {
   headers?: Record<string, string>;
   body?: any;
   payload?: PayloadSpec;
+  media?: MediaSpec; // Media files for upload
   validation?: ResponseValidation[];
   extractData?: string[];
   useData?: Record<string, string>;
@@ -119,4 +121,17 @@ export interface DataExtraction {
   source: "response_body" | "response_header" | "status_code";
   extractor: "json_path" | "regex" | "xpath";
   expression: string;
+}
+
+export interface MediaSpec {
+  files?: MediaFile[];
+  formData?: Record<string, any>; // Additional form fields
+  contentType?: "multipart/form-data" | "application/octet-stream";
+}
+
+export interface MediaFile {
+  fieldName: string; // Form field name (e.g., "file", "avatar", "document")
+  filePath: string; // Path to the file
+  fileName?: string; // Optional custom filename
+  mimeType?: string; // Optional MIME type override
 }

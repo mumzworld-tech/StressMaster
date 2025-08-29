@@ -16,6 +16,7 @@ import { IntelligentErrorRecovery } from "../../../features/execution";
 import { PatternLearner } from "../../../features/parsing/pattern-learner";
 import { ClarificationEngine } from "../../../features/parsing/clarification-engine";
 import { AdvancedErrorRecovery } from "../../../features/parsing/advanced-error-recovery";
+import { MediaProcessor } from "../../../features/common/media-utils";
 import {
   FALLBACK_PARSING_RULES,
   PARSING_PATTERNS,
@@ -57,15 +58,26 @@ export class FallbackParser {
       const methods = this.extractMethods(rawInput);
       const headers = this.extractHeaders(rawInput);
       const bodies = this.extractBodies(rawInput);
-      const loadInfo = this.extractLoadInfo(rawInput);
+      const loadInfo = this.extractLoadInfo(input);
       const incrementInfo = detectIncrementIntent(input);
+
+      // Extract media files
+      const media = MediaProcessor.parseMediaReferences(rawInput);
+
+      // Extract workflow information
+      const workflowInfo = this.extractWorkflowInfo(rawInput);
+
+      // Extract OpenAPI information
+      const openapiInfo = this.extractOpenAPIInfo(rawInput);
 
       // Build LoadTestSpec
       const spec: LoadTestSpec = {
         id: `fallback_${Date.now()}`,
         name: "Fallback Parsed Test",
         description: `Parsed from: ${input.substring(0, 100)}...`,
-        testType: (loadInfo.testType || "baseline") as any,
+        testType: workflowInfo.isWorkflow
+          ? "workflow"
+          : ((loadInfo.testType || "baseline") as any),
         requests: [],
         loadPattern: loadInfo.loadPattern,
         duration: {
@@ -74,80 +86,119 @@ export class FallbackParser {
         },
       };
 
-      // Create request specification
-      if (urls.length > 0) {
-        const request: RequestSpec = {
-          method: (methods[0] || "POST") as any,
-          url: urls[0],
-          headers: headers,
-        };
-
-        // Handle body/payload based on incrementing requirements
-        if (bodies[0]) {
-          if (
-            incrementInfo.shouldIncrement &&
-            incrementInfo.fields.length > 0
-          ) {
-            // Create payload structure with variables for incrementing
-            let template = this.normalizeJsonQuotes(bodies[0]);
-            const variables = incrementInfo.fields.map((field) => {
-              // Extract the current value from the JSON body (including nested fields)
-              let baseValue = "1";
-              try {
-                const normalizedTemplate = this.normalizeJsonQuotes(template);
-                const bodyObj = JSON.parse(normalizedTemplate);
-
-                // Search for the field in the entire JSON structure (including nested objects)
-                const fieldValue = this.findNestedFieldValue(bodyObj, field);
-
-                if (fieldValue !== undefined) {
-                  baseValue = fieldValue;
-
-                  // Replace the literal value with template variable in the template
-                  // Handle both "field": "value" and "field":"value" patterns
-                  const patterns = [
-                    `"${field}": "${baseValue}"`, // with space
-                    `"${field}":"${baseValue}"`, // without space
-                  ];
-
-                  const newPattern = `"${field}":"{{${field}}}"`;
-
-                  let newTemplate = template;
-                  for (const pattern of patterns) {
-                    if (template.includes(pattern)) {
-                      newTemplate = template.replace(pattern, newPattern);
-                      break;
-                    }
-                  }
-
-                  template = newTemplate;
-                }
-              } catch (e) {
-                // If parsing fails, use a default
-                baseValue = "req-1";
-              }
+      // Handle workflow tests
+      if (workflowInfo.isWorkflow) {
+        spec.workflow = [
+          {
+            type: workflowInfo.type,
+            steps: workflowInfo.steps.map((step) => {
+              // Extract media for this specific step
+              const stepMedia = this.extractStepMedia(
+                input,
+                step.method,
+                step.url
+              );
 
               return {
-                name: field,
-                type: "incremental" as const,
-                parameters: {
-                  baseValue: baseValue,
-                },
+                ...step,
+                requestCount: 1,
+                headers: headers,
+                ...(stepMedia && { media: stepMedia }),
+                ...(step.body && { body: step.body }),
               };
-            });
+            }),
+          },
+        ];
+      } else {
+        // Create request specification for single requests
+        if (urls.length > 0) {
+          const request: RequestSpec = {
+            method: (methods[0] || "POST") as any,
+            url: urls[0],
+            headers: headers,
+          };
 
-            request.payload = {
-              template: template,
-              variables: variables,
-            };
-          } else {
-            // Simple body without incrementing
-            // Set the body directly - it's already loaded from file or extracted from command
-            request.body = this.normalizeJsonQuotes(bodies[0]);
+          // Handle media files if present
+          if (media) {
+            request.media = media;
           }
-        }
 
-        spec.requests.push(request);
+          // Handle OpenAPI files if present
+          if (openapiInfo.hasOpenAPI) {
+            request.payload = {
+              template: openapiInfo.filePath,
+              variables: [],
+            };
+          }
+
+          // Handle body/payload based on incrementing requirements
+          if (bodies[0] && !media && !openapiInfo.hasOpenAPI) {
+            // Don't set body if we have media files or OpenAPI
+            if (
+              incrementInfo.shouldIncrement &&
+              incrementInfo.fields.length > 0
+            ) {
+              // Create payload structure with variables for incrementing
+              let template = this.normalizeJsonQuotes(bodies[0]);
+              const variables = incrementInfo.fields.map((field) => {
+                // Extract the current value from the JSON body (including nested fields)
+                let baseValue = "1";
+                try {
+                  const normalizedTemplate = this.normalizeJsonQuotes(template);
+                  const bodyObj = JSON.parse(normalizedTemplate);
+
+                  // Search for the field in the entire JSON structure (including nested objects)
+                  const fieldValue = this.findNestedFieldValue(bodyObj, field);
+
+                  if (fieldValue !== undefined) {
+                    baseValue = fieldValue;
+
+                    // Replace the literal value with template variable in the template
+                    // Handle both "field": "value" and "field":"value" patterns
+                    const patterns = [
+                      `"${field}": "${baseValue}"`, // with space
+                      `"${field}":"${baseValue}"`, // without space
+                    ];
+
+                    const newPattern = `"${field}":"{{${field}}}"`;
+
+                    let newTemplate = template;
+                    for (const pattern of patterns) {
+                      if (template.includes(pattern)) {
+                        newTemplate = template.replace(pattern, newPattern);
+                        break;
+                      }
+                    }
+
+                    template = newTemplate;
+                  }
+                } catch (e) {
+                  // If parsing fails, use a default
+                  baseValue = "req-1";
+                }
+
+                return {
+                  name: field,
+                  type: "incremental" as const,
+                  parameters: {
+                    baseValue: baseValue,
+                  },
+                };
+              });
+
+              request.payload = {
+                template: template,
+                variables: variables,
+              };
+            } else {
+              // Simple body without incrementing
+              // Set the body directly - it's already loaded from file or extracted from command
+              request.body = this.normalizeJsonQuotes(bodies[0]);
+            }
+          }
+
+          spec.requests.push(request);
+        }
       }
 
       return {
@@ -458,9 +509,9 @@ export class FallbackParser {
   }
 
   private extractLoadInfo(input: string): {
-    testType: string;
     loadPattern: LoadPattern;
     duration: { value: number; unit: string };
+    testType?: string;
   } {
     // Extract test type
     let testType = "baseline";
@@ -471,11 +522,36 @@ export class FallbackParser {
       }
     }
 
-    // Extract request count first - improved pattern
-    const requestCountMatch = input.match(
+    // Extract request count with multiple patterns
+    let requestCount = 1;
+
+    // Pattern 1: "send X requests"
+    const sendPattern = input.match(
       /send\s+(\d+)\s+(?:POST|GET|PUT|DELETE|PATCH)\s+requests?/i
     );
-    const requestCount = requestCountMatch ? parseInt(requestCountMatch[1]) : 1;
+    if (sendPattern) {
+      requestCount = parseInt(sendPattern[1]);
+    }
+
+    // Pattern 2: "X requests" (standalone)
+    const standalonePattern = input.match(/(\d+)\s+requests?/i);
+    if (standalonePattern && !sendPattern) {
+      requestCount = parseInt(standalonePattern[1]);
+    }
+
+    // Pattern 3: "spike test with X requests"
+    const spikePattern = input.match(
+      /spike\s+test\s+(?:with\s+)?(\d+)\s+requests?/i
+    );
+    if (spikePattern) {
+      requestCount = parseInt(spikePattern[1]);
+    }
+
+    // Pattern 4: "X requests to"
+    const toPattern = input.match(/(\d+)\s+requests?\s+to/i);
+    if (toPattern && !sendPattern && !standalonePattern && !spikePattern) {
+      requestCount = parseInt(toPattern[1]);
+    }
 
     // Extract load pattern
     let loadPattern: LoadPattern = {
@@ -501,6 +577,147 @@ export class FallbackParser {
       : { value: 60, unit: "s" };
 
     return { testType, loadPattern, duration };
+  }
+
+  private extractWorkflowInfo(input: string): {
+    isWorkflow: boolean;
+    type: "sequential" | "parallel";
+    steps: Array<{
+      method: string;
+      url: string;
+      media?: any;
+      body?: any;
+    }>;
+  } {
+    const workflowPatterns = this.rules.workflowPatterns;
+    let isWorkflow = false;
+    let type: "sequential" | "parallel" = "sequential";
+    let steps: Array<{ method: string; url: string; media?: any; body?: any }> =
+      [];
+
+    // Check for explicit workflow keywords first
+    const hasWorkflowKeywords =
+      /(?:first|then|next|finally|start|begin|parallel|simultaneously|and\s+(?:then\s+)?(?:GET|POST|PUT|DELETE|PATCH))/i.test(
+        input
+      );
+
+    if (!hasWorkflowKeywords) {
+      return { isWorkflow: false, type: "sequential", steps: [] };
+    }
+
+    // Check for workflow patterns
+    for (const pattern of workflowPatterns) {
+      const matches = input.match(pattern);
+      if (matches) {
+        isWorkflow = true;
+
+        // Determine workflow type based on pattern
+        if (
+          pattern.source.includes("parallel") ||
+          pattern.source.includes("and")
+        ) {
+          type = "parallel";
+        } else {
+          type = "sequential";
+        }
+
+        // Extract steps more carefully
+        const methodMatches = input.match(/\b(GET|POST|PUT|DELETE|PATCH)\b/gi);
+        const urlMatches = input.match(/https?:\/\/[^\s,;"\]]+/gi);
+
+        if (methodMatches && urlMatches && methodMatches.length >= 2) {
+          // Only treat as workflow if we have at least 2 steps
+          steps = methodMatches
+            .map((method, index) => {
+              const url = urlMatches[index] || "";
+              if (!url) return null; // Skip steps without URLs
+
+              // Extract step-specific media and body
+              const stepMedia = this.extractStepMedia(input, method, url);
+              const stepBody = this.extractStepBody(input, method, url);
+
+              return {
+                method: method.toUpperCase(),
+                url: url,
+                media: stepMedia,
+                body: stepBody,
+              };
+            })
+            .filter((step) => step !== null) as Array<{
+            method: string;
+            url: string;
+            media?: any;
+            body?: any;
+          }>;
+
+          // Only treat as workflow if we have valid steps
+          if (steps.length < 2) {
+            isWorkflow = false;
+            steps = [];
+          }
+        }
+        break;
+      }
+    }
+
+    return { isWorkflow, type, steps };
+  }
+
+  private extractOpenAPIInfo(input: string): {
+    hasOpenAPI: boolean;
+    filePath: string;
+  } {
+    const openapiPatterns = this.rules.openapiPatterns;
+    let hasOpenAPI = false;
+    let filePath = "";
+
+    // Check for OpenAPI file patterns
+    for (const pattern of openapiPatterns) {
+      const matches = input.match(pattern);
+      if (matches) {
+        hasOpenAPI = true;
+        filePath = matches[1] || matches[0];
+        break;
+      }
+    }
+
+    return { hasOpenAPI, filePath };
+  }
+
+  private extractStepMedia(input: string, method: string, url: string): any {
+    // Extract media files that are associated with this specific step
+    // Look for media references near this method/url combination
+    const stepPattern = new RegExp(
+      `${method}\\s+${url.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      )}[^;]*?(?:with|and)\\s+([^;]+)`,
+      "i"
+    );
+    const match = input.match(stepPattern);
+
+    if (match) {
+      const stepContext = match[1];
+      return MediaProcessor.parseMediaReferences(stepContext);
+    }
+
+    // Fallback: check if there's media in the entire input
+    return MediaProcessor.parseMediaReferences(input);
+  }
+
+  private extractStepBody(input: string, method: string, url: string): any {
+    // Extract body from the entire input if it's a single request
+    // This is a simplified approach; a more robust solution would involve
+    // finding the body within the context of the method and URL.
+    // For now, we'll try to find a body that matches the method and URL.
+    // This is a placeholder and needs more sophisticated logic.
+    // For now, we'll return undefined, meaning no specific body for this step.
+    // A more accurate approach would involve finding the body *within* the
+    // context of the method and URL, or if the body is a global one.
+    // For example, if the body is "body: { ... }" or "payload: { ... }"
+    // and it's not explicitly tied to a step, we might return it.
+    // For now, we'll return undefined.
+    return undefined;
   }
 
   private generateSuggestions(spec: LoadTestSpec, input: string): string[] {
