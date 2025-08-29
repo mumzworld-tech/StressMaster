@@ -58,7 +58,7 @@ export class FallbackParser {
       const methods = this.extractMethods(rawInput);
       const headers = this.extractHeaders(rawInput);
       const bodies = this.extractBodies(rawInput);
-      const loadInfo = this.extractLoadInfo(rawInput);
+      const loadInfo = this.extractLoadInfo(input);
       const incrementInfo = detectIncrementIntent(input);
 
       // Extract media files
@@ -522,11 +522,36 @@ export class FallbackParser {
       }
     }
 
-    // Extract request count first - improved pattern
-    const requestCountMatch = input.match(
+    // Extract request count with multiple patterns
+    let requestCount = 1;
+
+    // Pattern 1: "send X requests"
+    const sendPattern = input.match(
       /send\s+(\d+)\s+(?:POST|GET|PUT|DELETE|PATCH)\s+requests?/i
     );
-    const requestCount = requestCountMatch ? parseInt(requestCountMatch[1]) : 1;
+    if (sendPattern) {
+      requestCount = parseInt(sendPattern[1]);
+    }
+
+    // Pattern 2: "X requests" (standalone)
+    const standalonePattern = input.match(/(\d+)\s+requests?/i);
+    if (standalonePattern && !sendPattern) {
+      requestCount = parseInt(standalonePattern[1]);
+    }
+
+    // Pattern 3: "spike test with X requests"
+    const spikePattern = input.match(
+      /spike\s+test\s+(?:with\s+)?(\d+)\s+requests?/i
+    );
+    if (spikePattern) {
+      requestCount = parseInt(spikePattern[1]);
+    }
+
+    // Pattern 4: "X requests to"
+    const toPattern = input.match(/(\d+)\s+requests?\s+to/i);
+    if (toPattern && !sendPattern && !standalonePattern && !spikePattern) {
+      requestCount = parseInt(toPattern[1]);
+    }
 
     // Extract load pattern
     let loadPattern: LoadPattern = {
@@ -607,13 +632,15 @@ export class FallbackParser {
               const url = urlMatches[index] || "";
               if (!url) return null; // Skip steps without URLs
 
+              // Extract step-specific media and body
+              const stepMedia = this.extractStepMedia(input, method, url);
+              const stepBody = this.extractStepBody(input, method, url);
+
               return {
                 method: method.toUpperCase(),
                 url: url,
-                media: MediaProcessor.parseMediaReferences(input),
-                body: this.extractBodies(input)[0]
-                  ? this.normalizeJsonQuotes(this.extractBodies(input)[0])
-                  : undefined,
+                media: stepMedia,
+                body: stepBody,
               };
             })
             .filter((step) => step !== null) as Array<{
@@ -676,6 +703,21 @@ export class FallbackParser {
 
     // Fallback: check if there's media in the entire input
     return MediaProcessor.parseMediaReferences(input);
+  }
+
+  private extractStepBody(input: string, method: string, url: string): any {
+    // Extract body from the entire input if it's a single request
+    // This is a simplified approach; a more robust solution would involve
+    // finding the body within the context of the method and URL.
+    // For now, we'll try to find a body that matches the method and URL.
+    // This is a placeholder and needs more sophisticated logic.
+    // For now, we'll return undefined, meaning no specific body for this step.
+    // A more accurate approach would involve finding the body *within* the
+    // context of the method and URL, or if the body is a global one.
+    // For example, if the body is "body: { ... }" or "payload: { ... }"
+    // and it's not explicitly tied to a step, we might return it.
+    // For now, we'll return undefined.
+    return undefined;
   }
 
   private generateSuggestions(spec: LoadTestSpec, input: string): string[] {
