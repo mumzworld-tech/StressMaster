@@ -779,9 +779,11 @@ export class UnifiedCommandParser implements CommandParser {
     const hasBody = firstRequest.body !== undefined;
     const hasPayload =
       firstRequest.payload && typeof firstRequest.payload === "object";
+    const hasMedia =
+      firstRequest.media && typeof firstRequest.media === "object";
 
-    if (!isGetRequest && !hasBody && !hasPayload) {
-      console.log("❌ Failed: No body or payload for non-GET request");
+    if (!isGetRequest && !hasBody && !hasPayload && !hasMedia) {
+      console.log("❌ Failed: No body, payload, or media for non-GET request");
       return false;
     }
 
