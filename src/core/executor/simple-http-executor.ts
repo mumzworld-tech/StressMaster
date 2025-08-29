@@ -70,16 +70,26 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
 
         // Prepare request data
         let requestData: any = undefined;
+
+        // Normalize: if body is a string like "@file.json", convert to payload template
+        if (
+          request.body &&
+          typeof request.body === "string" &&
+          request.body.startsWith("@") &&
+          !request.payload
+        ) {
+          request.payload = {
+            template: request.body,
+            // carry variables if present at request level (or leave empty)
+            variables: (request as any).variables || [],
+          } as any;
+          delete request.body;
+        }
+
         if (request.body) {
-          console.log("🔍 Using request.body:", JSON.stringify(request.body));
           requestData = request.body;
         } else if (request.payload) {
-          console.log(
-            "🔍 Using request.payload:",
-            JSON.stringify(request.payload)
-          );
           requestData = this.generateRequestBody(request.payload, i);
-          console.log("🔍 Generated requestData:", JSON.stringify(requestData));
         }
 
         // Only show detailed request info for first request or if verbose
@@ -229,6 +239,18 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
     try {
       let body = payload.template;
 
+      // Handle nested template objects (AI sometimes creates these)
+      if (typeof body === "string" && body.startsWith('{"template"')) {
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed.template) {
+            body = parsed.template;
+          }
+        } catch (e) {
+          // If parsing fails, continue with original body
+        }
+      }
+
       // Handle file references (e.g., @filename.json)
       if (typeof body === "string" && body.startsWith("@")) {
         const filePath = body.substring(1); // Remove @ prefix
@@ -238,7 +260,6 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
         try {
           const fullPath = path.resolve(process.cwd(), filePath);
           body = fs.readFileSync(fullPath, "utf8");
-          console.log(`📁 Loaded file: ${filePath}`);
 
           // If we have variables and this is a file reference, automatically handle requestId incrementing
           if (payload.variables && payload.variables.length > 0) {
@@ -253,9 +274,6 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
                   // Update the baseValue to match the actual value in the file
                   requestIdVar.parameters = requestIdVar.parameters || {};
                   requestIdVar.parameters.baseValue = jsonData.requestId;
-                  console.log(
-                    `🔧 Updated requestId baseValue to: ${jsonData.requestId}`
-                  );
                 }
               } catch (parseError) {
                 console.warn(
@@ -270,7 +288,11 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
             `⚠️ Failed to load file ${filePath}:`,
             (fileError as Error).message
           );
-          return {};
+          console.warn(`Current working directory: ${process.cwd()}`);
+          console.warn(
+            `Attempted full path: ${path.resolve(process.cwd(), filePath)}`
+          );
+          return body; // Return the original template string instead of empty object
         }
       }
 
@@ -304,19 +326,13 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
           // Replace placeholder if it exists
           body = body.replace(`{{${variable.name}}}`, normalizedValue);
 
-          // Also replace static values in the JSON for common fields
-          if (variable.name === "requestId") {
-            body = body.replace(
-              /"requestId":\s*"[^"]*"/g,
-              `"requestId": "${normalizedValue}"`
-            );
-          }
-          if (variable.name === "externalId") {
-            body = body.replace(
-              /"externalId":\s*"[^"]*"/g,
-              `"externalId": "${normalizedValue}"`
-            );
-          }
+          // Replace any field in the JSON with the generated value (dynamic approach)
+          // Create a dynamic regex pattern for any field
+          const fieldRegex = new RegExp(`"${variable.name}":\\s*"[^"]*"`, "g");
+          body = body.replace(
+            fieldRegex,
+            `"${variable.name}": "${normalizedValue}"`
+          );
         });
       }
 
@@ -422,9 +438,6 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
       // Check for startValue (AI format)
       if (parameters?.startValue) {
         const startValue = parameters.startValue.toString();
-        console.log(
-          `🔍 Executor: Processing startValue: "${startValue}" with requestIndex: ${requestIndex}`
-        );
 
         // Extract base and number parts (e.g., "ai-claude-req2" -> "ai-claude-req" + "2")
         const match = startValue.match(/^(.+?)(\d+)$/);
@@ -432,16 +445,10 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
           const prefix = match[1];
           const startNum = parseInt(match[2]);
           const result = `${prefix}${startNum + requestIndex}`;
-          console.log(
-            `🔍 Executor: Incremented with pattern: "${prefix}${
-              startNum + requestIndex
-            }"`
-          );
           return result;
         }
         // If no number found, append the index
         const result = `${startValue}-${requestIndex + 1}`;
-        console.log(`🔍 Executor: Appended index: "${result}"`);
         return result;
       }
     }
@@ -462,10 +469,6 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
 
       // Handle requestId specifically with incremental support
       if (lowerName.includes("requestid")) {
-        console.log("🔍 Executor: Processing requestId variable:", {
-          parameters,
-          requestIndex,
-        });
         // If user provided a base requestId, increment it
         if (parameters?.baseValue && requestIndex !== undefined) {
           const baseId = parameters.baseValue.toString();
