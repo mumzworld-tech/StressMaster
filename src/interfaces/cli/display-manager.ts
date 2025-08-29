@@ -127,6 +127,24 @@ export class DisplayManager {
     );
     console.log();
 
+    console.log(chalk.yellow.bold("🔄 Workflow Testing:"));
+    console.log(
+      chalk.gray(
+        "  first GET @api.yaml users, then POST @api.yaml orders with user from step 1"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  start by getting auth token, then simultaneously fetch products and categories"
+      )
+    );
+    console.log(
+      chalk.gray(
+        "  first GET https://api.com/users, then POST https://api.com/orders, then PUT https://api.com/users/{id}"
+      )
+    );
+    console.log();
+
     console.log(chalk.yellow.bold("💡 Tips:"));
     console.log(
       chalk.gray("  • Use natural language to describe your load test")

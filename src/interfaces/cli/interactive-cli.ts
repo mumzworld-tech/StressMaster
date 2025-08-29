@@ -272,18 +272,44 @@ export class InteractiveCLI implements CLIInterface {
       console.log(
         chalk.gray("   ┌─ Test Type: ") + chalk.white.bold(spec.testType)
       );
-      console.log(
-        chalk.gray("   ├─ Target URL: ") +
-          chalk.white.bold(spec.requests[0]?.url)
-      );
-      console.log(
-        chalk.gray("   ├─ HTTP Method: ") +
-          chalk.white.bold(spec.requests[0]?.method)
-      );
-      console.log(
-        chalk.gray("   └─ Request Count: ") +
-          chalk.white.bold(spec.loadPattern.virtualUsers)
-      );
+
+      // Handle workflow tests differently
+      if (
+        spec.testType === "workflow" &&
+        spec.workflow &&
+        spec.workflow.length > 0
+      ) {
+        const workflowSteps = spec.workflow[0]?.steps || [];
+        console.log(
+          chalk.gray("   ├─ Workflow Steps: ") +
+            chalk.white.bold(workflowSteps.length)
+        );
+        const firstStep = workflowSteps[0];
+        const stepInfo =
+          "method" in firstStep && "url" in firstStep
+            ? `${firstStep.method || "N/A"} ${firstStep.url || "N/A"}`
+            : "N/A";
+        console.log(
+          chalk.gray("   ├─ First Step: ") + chalk.white.bold(stepInfo)
+        );
+        console.log(
+          chalk.gray("   └─ Request Count: ") +
+            chalk.white.bold(spec.loadPattern.virtualUsers)
+        );
+      } else {
+        console.log(
+          chalk.gray("   ├─ Target URL: ") +
+            chalk.white.bold(spec.requests[0]?.url)
+        );
+        console.log(
+          chalk.gray("   ├─ HTTP Method: ") +
+            chalk.white.bold(spec.requests[0]?.method)
+        );
+        console.log(
+          chalk.gray("   └─ Request Count: ") +
+            chalk.white.bold(spec.loadPattern.virtualUsers)
+        );
+      }
       console.log();
 
       // Enhance API request if needed

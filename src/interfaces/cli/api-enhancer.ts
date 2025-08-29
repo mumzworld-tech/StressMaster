@@ -17,6 +17,27 @@ export class APIEnhancer {
     const enhancements: string[] = [];
     const messages: string[] = [];
 
+    // Skip enhancement for workflow tests
+    if (
+      spec.testType === "workflow" ||
+      (spec.workflow && spec.workflow.length > 0)
+    ) {
+      return {
+        enhanced: false,
+        message: "Workflow test - no enhancement needed",
+        summary: "",
+      };
+    }
+
+    // Check if we have requests to enhance
+    if (!spec.requests || spec.requests.length === 0) {
+      return {
+        enhanced: false,
+        message: "No requests to enhance",
+        summary: "",
+      };
+    }
+
     // 1. Header Enhancement - Detect and add various authentication headers
     const headerEnhancements = this.enhanceHeaders(spec, input);
     if (headerEnhancements.enhanced) {
@@ -113,8 +134,8 @@ export class APIEnhancer {
 
     // Detect Content-Type patterns
     if (
-      spec.requests[0].method.toLowerCase() === "post" &&
-      !spec.requests[0].headers?.["Content-Type"]
+      spec.requests[0]?.method?.toLowerCase() === "post" &&
+      !spec.requests[0]?.headers?.["Content-Type"]
     ) {
       spec.requests[0].headers = spec.requests[0].headers || {};
       spec.requests[0].headers["Content-Type"] = "application/json";

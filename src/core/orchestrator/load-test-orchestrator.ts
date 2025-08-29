@@ -521,8 +521,8 @@ export class LoadTestWorkflowOrchestrator implements LoadTestOrchestrator {
       correlatedData: {},
       errors: [],
       stepHistory: workflow.map((step) => ({
-        stepId: step.id,
-        stepName: step.name,
+        stepId: step.id || "step",
+        stepName: step.name || "Step",
         status: "pending",
         startTime: new Date(),
         retryCount: 0,

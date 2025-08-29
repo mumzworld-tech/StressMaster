@@ -119,6 +119,16 @@ export class K6LoadExecutor implements K6Executor {
   }
 
   private buildK6Script(spec: LoadTestSpec): string {
+    // Check if this is a workflow test
+    if (
+      spec.testType === "workflow" &&
+      spec.workflow &&
+      spec.workflow.length > 0
+    ) {
+      return this.buildWorkflowK6Script(spec);
+    }
+
+    // Original single request logic
     const request = spec.requests[0];
     const loadPattern = spec.loadPattern;
 
@@ -154,6 +164,94 @@ export default function() {
   errorRate.add(response.status !== 200);
   
   ${this.generateThinkTime(loadPattern)}
+}
+`;
+
+    return script;
+  }
+
+  private buildWorkflowK6Script(spec: LoadTestSpec): string {
+    const workflow = spec.workflow?.[0]; // Get the first workflow with null check
+    const loadPattern = spec.loadPattern;
+
+    if (!workflow || !workflow.steps) {
+      throw new Error("Invalid workflow structure: missing workflow or steps");
+    }
+
+    // Extract all steps from the workflow
+    const steps = workflow.steps;
+
+    // Calculate total requests for proper K6 configuration
+    const totalRequests = steps.reduce((total, step) => {
+      if ("requestCount" in step) {
+        return total + (step.requestCount || 1);
+      }
+      return total + 1;
+    }, 0);
+
+    // Generate step definitions
+    const stepDefinitions = steps
+      .map((step, index) => {
+        // Type guard to check if this is a WorkflowRequest
+        if (!("method" in step && "url" in step)) {
+          throw new Error(
+            `Invalid workflow step ${index}: missing method or url`
+          );
+        }
+
+        const url = step.url;
+        const method = step.method;
+        const headers = JSON.stringify(step.headers || {});
+        const body = step.body ? JSON.stringify(step.body) : "null";
+        const requestCount = step.requestCount || 1;
+
+        return `
+  // Step ${index + 1}: ${method} ${url} (${requestCount} requests)
+  for (let i = 0; i < ${requestCount}; i++) {
+    const response = http.request('${method}', '${url}', ${body}, { headers: ${headers} });
+    
+    check(response, {
+      'step ${index + 1} status is 200': (r) => r.status === 200,
+      'step ${
+        index + 1
+      } response time < 5000ms': (r) => r.timings.duration < 5000,
+    });
+    
+    errorRate.add(response.status !== 200);
+    
+    // Small delay between requests in the same step
+    if (i < ${requestCount} - 1) {
+      sleep(0.1);
+    }
+  }
+  
+  // Delay between workflow steps
+  if (${index} < ${steps.length - 1}) {
+    sleep(0.5);
+  }`;
+      })
+      .join("");
+
+    let script = `
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate } from 'k6/metrics';
+
+const errorRate = new Rate('errors');
+
+export const options = {
+  iterations: 1,  // Execute the workflow exactly once
+  vus: 1,         // Use 1 virtual user
+  duration: '1m', // Set a reasonable timeout
+  thresholds: {
+    http_req_duration: ['p(95)<5000'],
+    errors: ['rate<0.1'],
+  },
+};
+
+export default function() {
+  // Workflow execution: ${steps.length} steps, ${totalRequests} total requests
+  ${stepDefinitions}
 }
 `;
 

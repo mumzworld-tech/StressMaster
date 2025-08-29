@@ -275,16 +275,39 @@ export class UnifiedCommandParser implements CommandParser {
       try {
         const parsedJson = JSON.parse(response.response);
 
+        // Debug: Log what the AI returned
+        console.log("🔍 AI Response:", JSON.stringify(parsedJson, null, 2));
+
         // Validate the AI response structure
         if (!this.isValidAIResponse(parsedJson)) {
+          console.log("❌ AI response validation failed");
           throw new Error("AI response has invalid structure");
         }
 
         // Convert the AI response to LoadTestSpec
         let spec: LoadTestSpec;
 
+        // Check if AI returned workflow format
+        if (parsedJson.workflow && Array.isArray(parsedJson.workflow)) {
+          // AI returned workflow format - use it directly
+          spec = {
+            id: parsedJson.id || `workflow_${Date.now()}`,
+            name: parsedJson.name || "AI Generated Workflow",
+            description:
+              parsedJson.description ||
+              "Generated workflow from natural language command",
+            testType: parsedJson.testType || "workflow",
+            requests: parsedJson.requests || [], // Empty for workflow tests
+            workflow: parsedJson.workflow,
+            loadPattern: parsedJson.loadPattern || {
+              type: "constant",
+              virtualUsers: 1,
+            },
+            duration: parsedJson.duration || { value: 60, unit: "seconds" },
+          };
+        }
         // Check if AI returned LoadTestSpec format directly
-        if (parsedJson.requests && Array.isArray(parsedJson.requests)) {
+        else if (parsedJson.requests && Array.isArray(parsedJson.requests)) {
           // AI returned LoadTestSpec format - use it directly
           spec = {
             id: parsedJson.id || `ai_${Date.now()}`,
@@ -388,28 +411,40 @@ export class UnifiedCommandParser implements CommandParser {
   }
 
   private buildSimplePrompt(input: string): string {
-    // Simplified prompt that focuses on core functionality
-    return `Parse this command into a JSON load test specification:
-
-${input}
-
-Return a JSON object with:
-- method: HTTP method (GET, POST, etc.)
-- url: target URL
-- body: request body (if any)
-- requestCount: number of requests
-- loadPattern: {type: "constant", virtualUsers: number}
-- duration: {value: number, unit: "seconds"}
-
-IMPORTANT RULES:
-1. For file references like "@filename.json", set body to "@filename.json" (the executor will load the file)
-2. If the command mentions "increment [field]", add that field to an incrementFields array
-3. Use exact URLs and methods from the command
-
-Respond with ONLY valid JSON.`;
+    // Use the proper prompt builder for comprehensive AI parsing
+    return PromptBuilder.buildFullPrompt(input);
   }
 
   private isValidAIResponse(response: any): boolean {
+    // Check if it has workflow format
+    if (response.workflow && Array.isArray(response.workflow)) {
+      // For workflows, we need to validate the workflow structure
+      for (const workflowStep of response.workflow) {
+        if (
+          workflowStep.type &&
+          workflowStep.steps &&
+          Array.isArray(workflowStep.steps)
+        ) {
+          for (const step of workflowStep.steps) {
+            if (step.method && step.url) {
+              // Check for valid HTTP method
+              const validMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+              if (!validMethods.includes(step.method.toUpperCase())) {
+                return false;
+              }
+              // Check for valid URL format
+              try {
+                new URL(step.url);
+              } catch {
+                return false;
+              }
+            }
+          }
+        }
+      }
+      return true; // Workflow format is valid
+    }
+
     // Check if it has the LoadTestSpec format (new format)
     if (
       response.requests &&
@@ -652,13 +687,56 @@ Respond with ONLY valid JSON.`;
     }
 
     // Check if it has the basic required structure
-    const hasRequests =
-      Array.isArray(spec.requests) && spec.requests.length > 0;
     const hasLoadPattern =
       spec.loadPattern && typeof spec.loadPattern === "object";
 
-    if (!hasRequests || !hasLoadPattern) {
-      console.log("❌ Failed: Missing requests or loadPattern");
+    if (!hasLoadPattern) {
+      console.log("❌ Failed: Missing loadPattern");
+      return false;
+    }
+
+    // Check if it's a workflow test
+    if (
+      spec.testType === "workflow" &&
+      spec.workflow &&
+      Array.isArray(spec.workflow)
+    ) {
+      // Validate workflow structure
+      for (const workflowStep of spec.workflow) {
+        if (
+          workflowStep.type &&
+          workflowStep.steps &&
+          Array.isArray(workflowStep.steps)
+        ) {
+          for (const step of workflowStep.steps) {
+            // Check if it's a WorkflowRequest (has method and url)
+            if ("method" in step && "url" in step && step.method && step.url) {
+              // Check for valid HTTP method
+              const validMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+              if (!validMethods.includes(step.method.toUpperCase())) {
+                console.log("❌ Failed: Invalid method in workflow");
+                return false;
+              }
+              // Check for valid URL format
+              try {
+                new URL(step.url);
+              } catch (e) {
+                console.log("❌ Failed: URL format invalid in workflow");
+                return false;
+              }
+            }
+          }
+        }
+      }
+      return true; // Workflow is valid
+    }
+
+    // Check if it has the basic required structure for single requests
+    const hasRequests =
+      Array.isArray(spec.requests) && spec.requests.length > 0;
+
+    if (!hasRequests) {
+      console.log("❌ Failed: Missing requests");
       return false;
     }
 
