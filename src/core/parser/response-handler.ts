@@ -85,20 +85,17 @@ export class ResponseHandler {
         }
       } catch (error) {
         console.warn("AI response JSON parsing failed:", error);
-        console.warn("Raw AI response:", response);
-        console.warn("Cleaned response:", cleanedResponse);
-
         // If JSON parsing fails, attempt fallback parsing
         return this.fallbackParsing(response, originalInput);
       }
 
-      // Validate and enhance the parsed spec
+      // Simplified validation and enhancement
       const enhancedSpec = this.enhanceLoadTestSpec(parsedSpec, originalInput);
 
-      // Calculate confidence and identify ambiguities
+      // Simplified confidence calculation
       const confidence = this.calculateConfidence(enhancedSpec, originalInput);
-      const ambiguities = this.identifyAmbiguities(enhancedSpec, originalInput);
-      const suggestions = this.generateSuggestions(enhancedSpec, ambiguities);
+      const ambiguities: string[] = []; // Simplified - no complex ambiguity detection
+      const suggestions: string[] = []; // Simplified - no complex suggestions
 
       return {
         spec: enhancedSpec,
@@ -216,6 +213,10 @@ export class ResponseHandler {
 
     // If we have a body but need incrementing, convert to payload structure
     if (request.body && hasIncrementKeyword && !request.payload) {
+      console.log(
+        "🔍 DEBUG: Converting body to payload, original body:",
+        JSON.stringify(request.body)
+      );
       let bodyStr =
         typeof request.body === "string"
           ? request.body
@@ -226,6 +227,25 @@ export class ResponseHandler {
         originalInput.matchAll(/increment\s+(\w+)/gi)
       );
       const incrementFields = incrementMatches.map((match) => match[1]);
+
+      // Handle file references in string body
+      if (typeof request.body === "string" && request.body.startsWith("@")) {
+        console.log("🔍 DEBUG: File reference detected in body string");
+        // Convert string file reference to proper payload structure
+        request.payload = {
+          template: request.body,
+          variables: incrementFields.map((field) => ({
+            name: field,
+            type: "incremental" as const,
+            parameters: {
+              baseValue: "1",
+            },
+          })),
+        };
+        delete request.body;
+        return request;
+      }
+      console.log("🔍 DEBUG: Increment fields:", incrementFields);
 
       // Create variables for incrementing fields
       const variables: VariableDefinition[] = incrementFields.map((field) => {
@@ -238,10 +258,19 @@ export class ResponseHandler {
               : request.body;
           if (bodyObj[field]) {
             baseValue = bodyObj[field];
+            console.log(
+              `🔍 DEBUG: Found ${field} = ${baseValue}, replacing in template`
+            );
             // Replace the literal value with template variable in the template
             bodyStr = bodyStr.replace(
               `"${field}": "${baseValue}"`,
               `"${field}": "{{${field}}}"`
+            );
+            console.log("🔍 DEBUG: Template after replacement:", bodyStr);
+          } else {
+            console.log(
+              `🔍 DEBUG: Field ${field} not found in body object:`,
+              JSON.stringify(bodyObj)
             );
           }
         } catch (e) {
@@ -595,6 +624,18 @@ export class ResponseHandler {
     // Add payload if present
     if (simpleFormat.payload) {
       request.payload = simpleFormat.payload;
+    }
+
+    // Add variables if present (for file references with incrementing)
+    if (simpleFormat.variables && Array.isArray(simpleFormat.variables)) {
+      // If we have variables but no payload, create payload structure
+      if (!request.payload && request.body) {
+        request.payload = {
+          template: request.body,
+          variables: simpleFormat.variables,
+        };
+        delete request.body;
+      }
     }
 
     const result: LoadTestSpec = {

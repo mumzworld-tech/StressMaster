@@ -37,8 +37,7 @@ export class UnifiedCommandParser implements CommandParser {
 
   constructor(config: ParserConfig = {}) {
     this.config = {
-      aiProvider: "ollama",
-      modelName: "llama3.2:1b",
+      // Don't set hardcoded defaults - let the config file determine the provider
       maxRetries: 3,
       timeout: 30000,
       ...config,
@@ -82,23 +81,18 @@ export class UnifiedCommandParser implements CommandParser {
         );
       }
 
-      // Prioritize constructor config over file config
+      // Prioritize config file over constructor config
       const aiConfig: AIConfig = {
         provider:
-          this.config.aiProvider || aiConfigFromFile.provider || "ollama",
-        model:
-          this.config.modelName ||
-          aiConfigFromFile.ollama?.model ||
-          aiConfigFromFile.model ||
-          "llama3.2:1b",
-        apiKey: this.config.apiKey || aiConfigFromFile.apiKey,
+          aiConfigFromFile.provider || this.config.aiProvider || "ollama",
+        model: aiConfigFromFile.model || this.config.modelName || "llama3.2:1b",
+        apiKey: aiConfigFromFile.apiKey || this.config.apiKey,
         endpoint:
-          this.config.ollamaEndpoint ||
-          aiConfigFromFile.ollama?.endpoint ||
           aiConfigFromFile.endpoint ||
+          this.config.ollamaEndpoint ||
           "http://localhost:11434",
-        maxRetries: this.config.maxRetries || aiConfigFromFile.maxRetries || 3,
-        timeout: this.config.timeout || aiConfigFromFile.timeout || 30000,
+        maxRetries: aiConfigFromFile.maxRetries || this.config.maxRetries || 3,
+        timeout: aiConfigFromFile.timeout || this.config.timeout || 30000,
         options: aiConfigFromFile.options || {},
       };
 
@@ -197,22 +191,15 @@ export class UnifiedCommandParser implements CommandParser {
             } catch (enhanceError) {
               metrics.errorCount++;
               console.warn(`AI enhancement failed: ${enhanceError}`);
-              // Only fall back for major enhancement failures
-              if (this.config.aiProvider === "claude") {
-                console.log(
-                  "🔄 Claude enhancement failed, but result is still usable"
-                );
-                return aiResult.spec; // Return the original AI result
-              } else {
-                // For other providers, use fallback
-                metrics.fallbackUsed = true;
-                const fallbackResult = await this.fallbackParser.parseCommand(
-                  input
-                );
-                metrics.confidenceScore = fallbackResult.confidence;
-                metrics.parseTime = Date.now() - startTime;
-                return fallbackResult.spec;
-              }
+              // Unified fallback for all providers
+              console.log("🔄 AI enhancement failed, using fallback");
+              metrics.fallbackUsed = true;
+              const fallbackResult = await this.fallbackParser.parseCommand(
+                input
+              );
+              metrics.confidenceScore = fallbackResult.confidence;
+              metrics.parseTime = Date.now() - startTime;
+              return fallbackResult.spec;
             }
           } else {
             console.warn(
@@ -259,74 +246,34 @@ export class UnifiedCommandParser implements CommandParser {
     try {
       let response;
 
-      // Allow AI parsing for file references - let the AI handle them naturally
-      if (input.includes("@") && input.includes(".json")) {
-        console.log("📁 File reference detected - using AI parser");
+      // Enhanced file reference detection - now includes OpenAPI files
+      const hasFileReference =
+        input.includes("@") &&
+        (input.includes(".json") ||
+          input.includes(".yaml") ||
+          input.includes(".yml"));
+      const hasOpenAPIFile = this.detectOpenAPIFile(input);
+
+      // If OpenAPI file is detected, enhance the prompt with OpenAPI context
+      let enhancedInput = input;
+      if (hasOpenAPIFile) {
+        enhancedInput = await this.enhanceWithOpenAPIContext(input);
       }
 
-      // Check for natural language file references - also allow AI parsing
-      const naturalFilePatterns = [
-        /(?:from|in|using|with|load|read)\s+([a-zA-Z0-9._-]+\.json)/gi,
-        /(?:body|payload|data|json)\s+(?:from|in|using|with)\s+([a-zA-Z0-9._-]+\.json)/gi,
-        /(?:JSON\s+)?body\s+from\s+([a-zA-Z0-9._-]+\.json)/gi,
-      ];
+      // Unified approach for all providers - no special Claude handling
+      const prompt = this.buildSimplePrompt(enhancedInput);
 
-      for (const pattern of naturalFilePatterns) {
-        const match = input.match(pattern);
-        if (match) {
-          console.log(
-            `📁 Natural language file reference detected: "${match[0]}" - using AI parser`
-          );
-        }
-      }
-
-      // For Claude, we trust it to handle complex commands and file references
-      if (this.config.aiProvider === "claude") {
-        // Use the full prompt builder for Claude
-        const prompt = PromptBuilder.buildFullPrompt(input);
-
-        // Get AI response
-        response = await this.aiProvider.generateCompletion({
-          prompt: input,
-          systemPrompt: prompt,
-          model: this.config.modelName,
-          maxTokens: 2000,
-          temperature: 0.1,
-          format: "json",
-        });
-      } else {
-        // For other providers, use the original logic
-
-        // Build the prompt for AI parsing using intelligent template selection
-        const prompt = selectPromptTemplate(input);
-
-        // If no prompt is returned, it means we should use fallback for complex commands
-        if (!prompt) {
-          console.log("🔄 Complex command detected - using fallback parser");
-          throw new Error("Use fallback parser");
-        }
-
-        // Get AI response
-        response = await this.aiProvider.generateCompletion({
-          prompt,
-          format: "json",
-          temperature: 0.01, // Very low temperature for consistent parsing
-          maxTokens: 4000, // Increase max tokens for complex JSON
-        });
-      }
+      // Get AI response with more flexible temperature
+      response = await this.aiProvider.generateCompletion({
+        prompt,
+        format: "json",
+        temperature: 0.3, // Increased from 0.01 for more flexibility
+        maxTokens: 2000, // Reduced from 4000 for faster responses
+      });
 
       // Parse the response
       try {
         const parsedJson = JSON.parse(response.response);
-
-        // Only show detailed AI response in development mode
-        if (process.env.NODE_ENV === "development") {
-          // Silent raw response - no need to show technical details
-          console.log(
-            "🔍 Parsed AI Response:",
-            JSON.stringify(parsedJson, null, 2)
-          );
-        }
 
         // Validate the AI response structure
         if (!this.isValidAIResponse(parsedJson)) {
@@ -338,7 +285,7 @@ export class UnifiedCommandParser implements CommandParser {
 
         // Check if AI returned LoadTestSpec format directly
         if (parsedJson.requests && Array.isArray(parsedJson.requests)) {
-          // AI returned LoadTestSpec format - use it directly with some defaults
+          // AI returned LoadTestSpec format - use it directly
           spec = {
             id: parsedJson.id || `ai_${Date.now()}`,
             name: parsedJson.name || "AI Generated Test",
@@ -354,7 +301,7 @@ export class UnifiedCommandParser implements CommandParser {
             duration: parsedJson.duration || { value: 60, unit: "seconds" },
           };
         } else {
-          // AI returned old format - convert to LoadTestSpec
+          // AI returned simple format - convert to LoadTestSpec
           spec = {
             id: `ai_${Date.now()}`,
             name: "AI Generated Test",
@@ -379,185 +326,87 @@ export class UnifiedCommandParser implements CommandParser {
           };
         }
 
-        // Add incrementing support if mentioned in the command
-        if (input.toLowerCase().includes("increment")) {
-          const incrementFields = this.extractIncrementFields(input);
-          if (incrementFields.length > 0) {
-            // Only show debug info in development mode
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                "🔧 AI Parser: Creating payload template for incrementing fields:",
-                incrementFields
-              );
-            }
+        // Handle file references and incrementing fields
+        if (spec.requests[0]) {
+          const request = spec.requests[0];
 
-            // Check if AI already created a proper payload template
-            if (spec.requests[0].payload && spec.requests[0].payload.template) {
-              if (process.env.NODE_ENV === "development") {
-                console.log("🔧 AI Parser: Preserving AI's payload template");
+          // Check if body contains a file reference
+          if (
+            request.body &&
+            typeof request.body === "string" &&
+            request.body.startsWith("@")
+          ) {
+            // Convert file reference to payload template
+            request.payload = {
+              template: request.body,
+              variables: [],
+            };
+            delete request.body;
+          }
+
+          // Handle incrementing fields if mentioned
+          if (input.toLowerCase().includes("increment")) {
+            const incrementFields = this.extractIncrementFields(input);
+            if (incrementFields.length > 0) {
+              // Create payload template if not exists
+              if (!request.payload) {
+                request.payload = {
+                  template: request.body || "{}",
+                  variables: [],
+                };
+                delete request.body;
               }
-              // AI already created the template, preserve its variables
-              if (spec.requests[0].payload.variables) {
-                if (process.env.NODE_ENV === "development") {
-                  console.log(
-                    "🔧 AI Parser: AI provided variables:",
-                    spec.requests[0].payload.variables
-                  );
-                }
 
-                // Fix variable structure to match executor expectations
-                spec.requests[0].payload.variables =
-                  spec.requests[0].payload.variables.map((variable: any) => {
-                    // If variable has startValue directly, move it to parameters
-                    if (variable.startValue && !variable.parameters) {
-                      // For requestId, create a proper base value
-                      let startValue = variable.startValue;
-
-                      // If this is a file reference and we need to increment requestId,
-                      // we should read the actual value from the file
-                      if (
-                        variable.name === "requestId" &&
-                        spec.requests[0].payload?.template?.includes("@")
-                      ) {
-                        try {
-                          const fs = require("fs");
-                          const path = require("path");
-                          const fileMatch =
-                            spec.requests[0].payload.template.match(/@([^"]+)/);
-                          if (fileMatch) {
-                            const filename = fileMatch[1];
-                            const filePath = path.join(process.cwd(), filename);
-                            if (fs.existsSync(filePath)) {
-                              const fileContent = fs.readFileSync(
-                                filePath,
-                                "utf8"
-                              );
-                              const fileData = JSON.parse(fileContent);
-                              if (fileData.requestId) {
-                                startValue = fileData.requestId;
-                                console.log(
-                                  `📁 Using requestId from file: ${startValue}`
-                                );
-                              }
-                            }
-                          }
-                        } catch (error) {
-                          console.warn(
-                            `⚠️ Could not read requestId from file: ${error}`
-                          );
-                        }
-                      } else if (
-                        variable.name === "requestId" &&
-                        startValue === "1"
-                      ) {
-                        startValue = "burst-test-1";
-                      }
-
-                      return {
-                        name: variable.name,
-                        type: variable.type,
-                        parameters: {
-                          startValue: startValue,
-                          ...(variable.prefix && { prefix: variable.prefix }),
-                        },
-                      };
-                    }
-                    return variable;
-                  });
-
-                // Replace static values in the template with placeholders
-                if (spec.requests[0].payload.template) {
-                  let template = spec.requests[0].payload.template;
-                  spec.requests[0].payload.variables.forEach(
-                    (variable: any) => {
-                      // Replace the static value with a placeholder
-                      if (variable.name === "requestId") {
-                        // Find and replace the requestId value in the JSON
-                        template = template.replace(
-                          /"requestId":\s*"[^"]*"/g,
-                          `"requestId": "{{${variable.name}}}"`
-                        );
-                      }
-                    }
-                  );
-                  spec.requests[0].payload.template = template;
-                }
-
-                if (process.env.NODE_ENV === "development") {
-                  console.log(
-                    "🔧 AI Parser: Fixed variables structure:",
-                    spec.requests[0].payload.variables
-                  );
-                }
-              } else {
-                // Only create variables if AI didn't provide them
-                spec.requests[0].payload.variables = incrementFields.map(
-                  (field) => ({
-                    name: field,
-                    type: "incremental",
-                    parameters: {
-                      baseValue:
-                        this.findFieldValue(
-                          spec.requests[0].body || {},
-                          field
-                        ) || "1",
-                    },
-                  })
-                );
-              }
-            } else {
-              // Create a clean template without the extra increment fields
-              const cleanBody = { ...spec.requests[0].body };
-
-              // Remove any extra increment fields that might have been added
-              delete cleanBody.incrementRequestId;
-              delete cleanBody.incrementExternalId;
-              delete cleanBody.increment;
-
-              // Create template with variable placeholders
-              const templateBody = { ...cleanBody };
+              // Add variables for incrementing fields
               incrementFields.forEach((field) => {
-                this.replaceFieldWithVariable(
-                  templateBody,
-                  field,
-                  `{{${field}}}`
-                );
-              });
-
-              spec.requests[0].payload = {
-                template: JSON.stringify(templateBody),
-                variables: incrementFields.map((field) => ({
+                request.payload!.variables.push({
                   name: field,
                   type: "incremental",
                   parameters: {
-                    baseValue: this.findFieldValue(cleanBody, field) || "1",
+                    baseValue: "1",
                   },
-                })),
-              };
-              delete spec.requests[0].body;
-            }
-
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                "🔧 AI Parser: Final payload template:",
-                spec.requests[0].payload
-              );
+                });
+              });
             }
           }
         }
 
         return {
           spec,
-          confidence: 0.9,
+          confidence: 0.8, // Simplified confidence calculation
           ambiguities: [],
           suggestions: [],
         };
       } catch (parseError) {
-        throw new Error("Invalid JSON response from AI");
+        console.warn("AI response parsing failed:", parseError);
+        throw new Error("AI response parsing failed");
       }
     } catch (error) {
+      console.warn("AI parsing failed:", error);
       throw error;
     }
+  }
+
+  private buildSimplePrompt(input: string): string {
+    // Simplified prompt that focuses on core functionality
+    return `Parse this command into a JSON load test specification:
+
+${input}
+
+Return a JSON object with:
+- method: HTTP method (GET, POST, etc.)
+- url: target URL
+- body: request body (if any)
+- requestCount: number of requests
+- loadPattern: {type: "constant", virtualUsers: number}
+- duration: {value: number, unit: "seconds"}
+
+IMPORTANT RULES:
+1. For file references like "@filename.json", set body to "@filename.json" (the executor will load the file)
+2. If the command mentions "increment [field]", add that field to an incrementFields array
+3. Use exact URLs and methods from the command
+
+Respond with ONLY valid JSON.`;
   }
 
   private isValidAIResponse(response: any): boolean {
@@ -615,6 +464,103 @@ export class UnifiedCommandParser implements CommandParser {
       .filter((field) => field.length > 0);
   }
 
+  /**
+   * Detect if the input contains an OpenAPI file reference
+   */
+  private detectOpenAPIFile(input: string): boolean {
+    const openAPIPatterns = [
+      /@[\w\-_\/]+\.(yaml|yml|json)/i,
+      /openapi/i,
+      /swagger/i,
+      /api\s+spec/i,
+      /api\s+definition/i,
+    ];
+
+    return openAPIPatterns.some((pattern) => pattern.test(input));
+  }
+
+  /**
+   * Enhance input with OpenAPI context by parsing the file and adding schema information
+   */
+  private async enhanceWithOpenAPIContext(input: string): Promise<string> {
+    try {
+      // Extract file path from input
+      const fileMatch = input.match(/@([\w\-_\/]+\.(yaml|yml|json))/i);
+      if (!fileMatch) return input;
+
+      const filePath = fileMatch[1];
+
+      // Import OpenAPI parser
+      const { OpenAPIParser } = await import(
+        "../../../features/openapi/parser"
+      );
+      const parser = new OpenAPIParser();
+
+      // Parse the OpenAPI file
+      const result = await parser.parseFromFile(filePath);
+
+      if (!result.success) {
+        console.warn(`Failed to parse OpenAPI file: ${filePath}`);
+        return input;
+      }
+
+      // Create enhanced context
+      const enhancedContext = this.createOpenAPIContext(result);
+
+      return `${input}\n\nOpenAPI Context:\n${enhancedContext}`;
+    } catch (error) {
+      console.warn(`Error enhancing with OpenAPI context: ${error}`);
+      return input;
+    }
+  }
+
+  /**
+   * Create OpenAPI context string for AI prompt
+   */
+  private createOpenAPIContext(result: any): string {
+    const { spec, endpoints } = result;
+
+    let context = `API: ${spec.info?.title || "Unknown"} (${
+      spec.info?.version || "Unknown"
+    })\n`;
+    context += `Base URL: ${spec.servers?.[0]?.url || "Not specified"}\n`;
+    context += `Endpoints:\n`;
+
+    endpoints.forEach((endpoint: any, index: number) => {
+      context += `${index + 1}. ${endpoint.method.toUpperCase()} ${
+        endpoint.path
+      }\n`;
+      if (endpoint.summary) {
+        context += `   Summary: ${endpoint.summary}\n`;
+      }
+      if (endpoint.requestBody) {
+        context += `   Request Body Schema: ${JSON.stringify(
+          endpoint.requestBody.schema,
+          null,
+          2
+        )}\n`;
+        if (endpoint.requestBody.example) {
+          context += `   Example: ${JSON.stringify(
+            endpoint.requestBody.example,
+            null,
+            2
+          )}\n`;
+        }
+      }
+      if (endpoint.parameters && endpoint.parameters.length > 0) {
+        context += `   Parameters: ${endpoint.parameters
+          .map((p: any) => `${p.name}(${p.type})`)
+          .join(", ")}\n`;
+      }
+      context += "\n";
+    });
+
+    context +=
+      "\nIMPORTANT: Use the examples and schema to generate REALISTIC values, not faker templates.";
+
+    return context;
+  }
+
   private findFieldValue(obj: any, fieldName: string): string | null {
     if (!obj || typeof obj !== "object") return null;
 
@@ -661,6 +607,11 @@ export class UnifiedCommandParser implements CommandParser {
 
     // If body is already a proper object, return as is
     if (typeof body === "object" && !Array.isArray(body)) {
+      return body;
+    }
+
+    // If body is a string that looks like a file reference, preserve it
+    if (typeof body === "string" && body.startsWith("@")) {
       return body;
     }
 

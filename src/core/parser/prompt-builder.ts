@@ -48,103 +48,41 @@ export interface InputFormat {
 export class PromptBuilder {
   private static readonly SYSTEM_PROMPT = `You are StressMaster's AI assistant that converts natural language descriptions into structured load test specifications. 
 
-CRITICAL: You must respond with ONLY valid JSON. No explanations, no markdown, no extra text.
-
 Your task is to parse user commands and extract:
 - HTTP method (GET, POST, PUT, DELETE, etc.)
 - Target URL
-- Request payload template and variables
-- Load pattern (constant, ramp-up, spike, step, random-burst)
-- Test duration and virtual users or RPS
-- Test type (spike, stress, endurance, volume, baseline)
-- Bulk data handling for high-volume payloads
-- Random burst patterns for unpredictable traffic simulation
+- Request payload (if any)
+- Load pattern (constant, ramp-up, spike, step)
+- Test duration and virtual users
+- Test type (baseline, spike, stress, endurance, volume)
 
-CRITICAL RULES FOR JSON HANDLING:
-1. When the command contains a complete JSON object (like {"requestId": "seller-req1", "payload": [...]}), use that EXACT JSON as the request body
-2. Do NOT create template variables from literal values in the JSON
-3. Do NOT extract individual fields from complete JSON objects
-4. Use the exact URL specified in the command
-5. Use the exact HTTP method specified in the command
-6. If the command says "increment requestId", create a template variable for "requestId" field ONLY
-7. If the command says "increment order_id and increment_id", create template variables ONLY for those specific fields
-8. Preserve the complete JSON structure as-is
-9. Respond with ONLY the JSON object, no other text
-10. For load patterns, use SIMPLE configurations: just set "type" and "virtualUsers" to the requested count
-11. Do NOT create complex spike/ramp configurations with baselineVirtualUsers, peakVirtualUsers, etc.
+SPECIAL HANDLING:
+1. OpenAPI Files: If the command mentions an OpenAPI spec file (.yaml, .yml, .json), analyze it and generate appropriate payloads
+2. Dynamic Payloads: Generate realistic test data based on the API schema, not hardcoded values
+3. Multiple Endpoints: If testing multiple endpoints, create separate requests for each
 
-FILE REFERENCE HANDLING:
-1. When you see "@filename.json" in the command, use that as the payload template
-2. Set the payload template to "@filename.json" - the executor will load the file content
-3. If the command says "increment requestId", create a variable for requestId with incremental type
-4. Preserve the file reference format exactly as provided
+RULES:
+1. Respond with ONLY valid JSON
+2. Use exact URLs and methods from the command
+3. For file references like "@filename.json", use that as the payload template
+4. For OpenAPI files, generate dynamic payloads based on the schema
+5. For incrementing fields, add them to an incrementFields array
+6. Keep load patterns simple - just set type and virtualUsers
+7. Default to POST for requests with payloads, GET otherwise
+8. Generate realistic test data (names, emails, IDs, etc.) instead of hardcoded values
 
-Key guidelines:
-1. Generate unique IDs using timestamp-based approach
-2. Infer test type from the language used (e.g., "spike test" = spike, "gradually increase" = stress)
-3. Default to POST for requests with payloads, GET otherwise
-4. Use reasonable defaults for missing parameters
-5. Extract variable definitions from payload descriptions
-6. Set appropriate load patterns based on the test description
-7. For "random intervals" or "unpredictable traffic", use "random-burst" load pattern
-8. For bulk data with multiple items, use "bulk_data" variable type with itemCount parameter
-9. For high-volume tests (1000+ requests), use "volume" test type
-10. For spike patterns, use simple "spike" type with virtualUsers set to the requested count
-11. For ramp-up patterns, use simple "ramp-up" type with virtualUsers set to the target count
-12. Keep load patterns simple - avoid complex configurations that executors cannot handle
-
-EXAMPLE: If command is "send 2 POST requests to http://backbone.mumz.io/magento/qcomm-order with body {"requestId": "seller-req1", "payload": [{"order_id": "5783136"}]} increment requestId"
-- Use URL: http://backbone.mumz.io/magento/qcomm-order
-- Use method: POST
-- Use body: {"requestId": "{{requestId}}", "payload": [{"order_id": "5783136"}]}
-- Create variable: requestId with type "incremental"
-
-EXAMPLE: If command is "send 2 POST requests to http://backbone.mumz.io/magento/qcomm-order with body {"requestId": "seller-req1", "payload": [{"order_id": "5783136"}]} increment order_id"
-- Use URL: http://backbone.mumz.io/magento/qcomm-order
-- Use method: POST
-- Use body: {"requestId": "seller-req1", "payload": [{"order_id": "{{order_id}}"}]}
-- Create variable: order_id with type "incremental"
-
-EXAMPLE WITH FILE REFERENCE: If command is "send 3 post requests to http://backbone.mumz.io/qcomm-order with JSON body @magento-order-payload.json increment requestId"
-- Use URL: http://backbone.mumz.io/qcomm-order
-- Use method: POST
-- Use payload template: "@magento-order-payload.json"
-- Create variable: requestId with type "incremental" and baseValue that matches the actual value in the file
-- The executor will automatically replace the requestId field in the loaded JSON with the incremented value
-
-RESPOND WITH ONLY THIS JSON FORMAT:
-{
-  "id": "test_1234567890",
-  "name": "Load Test",
-  "description": "Parsed from user command",
-  "testType": "baseline",
-  "requests": [
+EXAMPLE OUTPUT:
     {
       "method": "POST",
-      "url": "http://backbone.mumz.io/magento/qcomm-order",
-      "payload": {
-        "template": "{\\"requestId\\": \\"{{requestId}}\\", \\"payload\\": [{\\"externalId\\": \\"ord#1\\"}]}",
-        "variables": [
-          {
-            "name": "requestId",
-            "type": "incremental",
-            "parameters": {
-              "baseValue": "log-testin1"
-            }
-          }
-        ]
-      }
+      "url": "http://api.example.com/endpoint",
+      "body": {"name": "John Doe", "email": "john@example.com", "age": 30},
+      "requestCount": 10,
+      "loadPattern": {"type": "constant", "virtualUsers": 5},
+      "duration": {"value": 60, "unit": "seconds"},
+      "incrementFields": ["requestId"]
     }
-  ],
-  "loadPattern": {
-    "type": "constant",
-    "virtualUsers": 2
-  },
-  "duration": {
-    "value": 30,
-    "unit": "seconds"
-  }
-}`;
+
+IMPORTANT: Generate ACTUAL values, not faker templates. Use realistic data like "John Doe", "john@example.com", 30, etc. Do NOT use {{faker.name.fullName}} or similar templates.`;
 
   private static readonly USER_PROMPT_TEMPLATE = `Parse this StressMaster command and convert it to a LoadTestSpec JSON:
 
@@ -153,6 +91,49 @@ Command: "{input}"
 Respond with only valid JSON, no additional text or explanation.`;
 
   private static readonly EXAMPLES: PromptExample[] = [
+    {
+      input:
+        'send 3 POST requests to http://backbone.mumz.io/magento/qcomm-order with header x-api-key 2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9 and body {"requestId": "demo-testing—10", "payload": [{"externalId": "ord#1"}]} increment requestId',
+      output: {
+        id: "test_" + Date.now(),
+        name: "Magento Order Test",
+        description:
+          'send 3 POST requests to http://backbone.mumz.io/magento/qcomm-order with header x-api-key 2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9 and body {"requestId": "demo-testing—10", "payload": [{"externalId": "ord#1"}]} increment requestId',
+        testType: "baseline",
+        requests: [
+          {
+            method: "POST",
+            url: "http://backbone.mumz.io/magento/qcomm-order",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": "2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9",
+            },
+            payload: {
+              template:
+                '{"requestId": "{{requestId}}", "payload": [{"externalId": "ord#1"}]}',
+              variables: [
+                {
+                  name: "requestId",
+                  type: "incremental",
+                  parameters: {
+                    baseValue: "demo-testing—10",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        loadPattern: {
+          type: "constant",
+          virtualUsers: 3,
+        },
+        duration: {
+          value: 30,
+          unit: "seconds",
+        },
+      },
+      description: "JSON payload with requestId incrementing",
+    },
     {
       input:
         'send 2 POST requests to http://backbone.mumz.io/magento/qcomm-order with header x-api-key 2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9 and body {"requestId": "seller-req1", "payload": [{"externalId": "Seller#1", "order_id": "5783136", "increment_id": "1202500044"}]} increment order_id and increment_id',

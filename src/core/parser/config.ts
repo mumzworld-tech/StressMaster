@@ -137,38 +137,38 @@ export interface DebugSession {
 export const DEFAULT_PARSER_CONFIG: ParserConfig = {
   preprocessing: {
     enableSanitization: true,
-    enableStructureExtraction: true,
-    maxInputLength: 10000,
+    enableStructureExtraction: false, // Simplified
+    maxInputLength: 5000, // Reduced from 10000
     normalizeWhitespace: true,
-    separateRequests: true,
+    separateRequests: false, // Simplified
   },
   formatDetection: {
-    confidenceThreshold: 0.7,
-    enableMultiFormatDetection: true,
+    confidenceThreshold: 0.5, // Reduced from 0.7 for more flexibility
+    enableMultiFormatDetection: false, // Simplified
     enablePatternMatching: true,
   },
   contextEnhancement: {
-    enableInference: true,
-    enableAmbiguityResolution: true,
-    maxAmbiguities: 5,
+    enableInference: false, // Simplified
+    enableAmbiguityResolution: false, // Simplified
+    maxAmbiguities: 3,
     inferenceConfidenceThreshold: 0.6,
   },
   aiProvider: {
-    maxRetries: 3,
-    temperature: 0.1,
-    enableValidationRetries: true,
-    timeoutMs: 30000,
+    maxRetries: 2, // Reduced from 3
+    temperature: 0.3, // Increased for more flexibility
+    enableValidationRetries: false, // Simplified
+    timeoutMs: 15000, // Reduced from 30000
   },
   fallback: {
     enableSmartFallback: true,
-    fallbackConfidenceThreshold: 0.5,
-    maxFallbackAttempts: 2,
+    fallbackConfidenceThreshold: 0.4, // Reduced from 0.6
+    maxFallbackAttempts: 1, // Reduced from 3
   },
   monitoring: {
-    enableMetrics: true,
-    enableDiagnostics: false,
-    logLevel: "info",
-    metricsRetentionMs: 24 * 60 * 60 * 1000, // 24 hours
+    enableMetrics: false, // Simplified
+    enableDiagnostics: false, // Simplified
+    logLevel: "warn", // Changed from "info"
+    metricsRetentionMs: 300000, // Reduced from 3600000
   },
 };
 
