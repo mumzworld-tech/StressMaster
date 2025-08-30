@@ -546,8 +546,14 @@ export default function() {
   // Constant pattern: ${requestCount} requests
   ${payloadCode}
   
+  // Update headers for multipart form data
+  let requestHeaders = ${headers};
+  if (media && media.files && media.files.length > 0) {
+    requestHeaders = { ...requestHeaders, 'Content-Type': contentType };
+  }
+  
   for (let i = 0; i < ${requestCount}; i++) {
-    const response = http.request('${method}', '${url}', payload, { headers: ${headers} });
+    const response = http.request('${method}', '${url}', payload, { headers: requestHeaders });
     
     check(response, {
       'step ${stepNumber} status is 200': (r) => r.status === 200,
@@ -746,21 +752,39 @@ const formData = ${JSON.stringify(formData)};
 `;
       }
 
-      // Generate FormData construction
+      // Generate multipart form data construction for K6
       payloadCode += `
 ${fileDataCode}
-const payload = new FormData();
+// Create multipart boundary
+const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+const contentType = 'multipart/form-data; boundary=' + boundary;
+
+// Build multipart body
+let multipartBody = '';
 ${files
   .map(
-    (file: any) =>
-      `payload.append('${file.fieldName}', fileBuffer, '${file.filePath
-        .split("/")
-        .pop()}');`
+    (file: any) => `
+// Add file part
+multipartBody += '--' + boundary + '\\r\\n';
+multipartBody += 'Content-Disposition: form-data; name="${
+      file.fieldName
+    }"; filename="${file.filePath.split("/").pop()}"\\r\\n';
+multipartBody += 'Content-Type: application/octet-stream\\r\\n\\r\\n';
+multipartBody += fileBuffer.toString('base64') + '\\r\\n';`
   )
   .join("\n")}
 ${Object.keys(formData)
-  .map((key) => `payload.append('${key}', JSON.stringify(formData['${key}']));`)
+  .map(
+    (key) => `
+// Add form field
+multipartBody += '--' + boundary + '\\r\\n';
+multipartBody += 'Content-Disposition: form-data; name="${key}"\\r\\n\\r\\n';
+multipartBody += JSON.stringify(formData['${key}']) + '\\r\\n';`
+  )
   .join("\n")}
+multipartBody += '--' + boundary + '--\\r\\n';
+
+const payload = multipartBody;
 `;
     }
 

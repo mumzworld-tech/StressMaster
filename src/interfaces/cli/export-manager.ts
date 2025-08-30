@@ -28,6 +28,11 @@ export class ExportManager {
     result: TestResult,
     options: ExportOptions
   ): Promise<string> {
+    // Check if this is a batch test
+    if (result.spec.testType === "batch" || result.spec.batch) {
+      return this.exportBatchTestResult(result, options);
+    }
+
     const outputDir = options.outputDir || this.defaultOutputDir;
     const filename =
       options.filename || this.generateFilename(result, options.format);
@@ -53,6 +58,113 @@ export class ExportManager {
     console.log(`📁 Exported test result to: ${filePath}`);
 
     return filePath;
+  }
+
+  private async exportBatchTestResult(
+    result: TestResult,
+    options: ExportOptions
+  ): Promise<string> {
+    const batchSpec = result.spec.batch;
+    if (!batchSpec) {
+      throw new Error("Batch specification not found in test result");
+    }
+
+    const outputDir = options.outputDir || this.defaultOutputDir;
+    const batchDir = path.join(outputDir, `batch-${result.id}`);
+
+    // Ensure batch directory exists
+    if (!fs.existsSync(batchDir)) {
+      fs.mkdirSync(batchDir, { recursive: true });
+    }
+
+    // Import batch report generator
+    const { BatchReportGenerator } = await import(
+      "../../core/executor/batch/report-generator"
+    );
+    const reportGenerator = new BatchReportGenerator();
+
+    // Generate individual test reports
+    const individualReports: any[] = [];
+    for (const testResult of batchSpec.tests) {
+      // Use the actual virtualUsers from each test's loadPattern
+      const individualRequestsCompleted =
+        testResult.loadPattern?.virtualUsers || 1;
+
+      // Create a mock result for each test (this would need to be enhanced with actual test results)
+      const mockTestResult = {
+        testId: testResult.id,
+        testName: testResult.name,
+        status: "completed" as const,
+        startTime: result.startTime,
+        endTime: result.endTime,
+        duration: result.endTime.getTime() - result.startTime.getTime(),
+        metrics: {
+          status: "completed" as const,
+          progress: 100,
+          currentVUs: 0,
+          requestsCompleted: individualRequestsCompleted,
+          requestsPerSecond:
+            result.metrics.throughput.requestsPerSecond /
+            batchSpec.tests.length,
+          avgResponseTime: result.metrics.responseTime.avg,
+          errorRate: result.metrics.errorRate,
+          timestamp: new Date(),
+        },
+        error: undefined,
+        retryCount: 0,
+        assertions: [],
+      };
+
+      const report = await reportGenerator.generateIndividualReport(
+        mockTestResult,
+        batchSpec,
+        batchDir
+      );
+      individualReports.push(report);
+    }
+
+    // Generate combined report
+    const mockResults = batchSpec.tests.map((test) => {
+      // Use the actual virtualUsers from each test's loadPattern
+      const individualRequestsCompleted = test.loadPattern?.virtualUsers || 1;
+
+      return {
+        testId: test.id,
+        testName: test.name,
+        status: "completed" as const,
+        startTime: result.startTime,
+        endTime: result.endTime,
+        duration: result.endTime.getTime() - result.startTime.getTime(),
+        metrics: {
+          status: "completed" as const,
+          progress: 100,
+          currentVUs: 0,
+          requestsCompleted: individualRequestsCompleted,
+          requestsPerSecond:
+            result.metrics.throughput.requestsPerSecond /
+            batchSpec.tests.length,
+          avgResponseTime: result.metrics.responseTime.avg,
+          errorRate: result.metrics.errorRate,
+          timestamp: new Date(),
+        },
+        error: undefined,
+        retryCount: 0,
+        assertions: [],
+      };
+    });
+
+    const combinedReport = await reportGenerator.generateCombinedReport(
+      batchSpec,
+      mockResults,
+      individualReports,
+      batchDir
+    );
+
+    console.log(`📁 Exported batch test results to: ${batchDir}`);
+    console.log(`   📄 Combined report: ${combinedReport.reportPath}`);
+    console.log(`   📄 Individual reports: ${individualReports.length} files`);
+
+    return combinedReport.reportPath;
   }
 
   private generateFilename(result: TestResult, format: string): string {

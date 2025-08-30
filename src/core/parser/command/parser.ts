@@ -287,8 +287,27 @@ export class UnifiedCommandParser implements CommandParser {
         // Convert the AI response to LoadTestSpec
         let spec: LoadTestSpec;
 
+        // Check if AI returned batch format
+        if (parsedJson.testType === "batch" && parsedJson.batch) {
+          // AI returned batch format - use it directly
+          spec = {
+            id: parsedJson.id || `batch_${Date.now()}`,
+            name: parsedJson.name || "AI Generated Batch Test",
+            description:
+              parsedJson.description ||
+              "Generated batch test from natural language command",
+            testType: parsedJson.testType || "batch",
+            requests: parsedJson.requests || [], // Empty for batch tests
+            batch: parsedJson.batch,
+            loadPattern: parsedJson.loadPattern || {
+              type: "constant",
+              virtualUsers: 1,
+            },
+            duration: parsedJson.duration || { value: 60, unit: "seconds" },
+          };
+        }
         // Check if AI returned workflow format
-        if (parsedJson.workflow && Array.isArray(parsedJson.workflow)) {
+        else if (parsedJson.workflow && Array.isArray(parsedJson.workflow)) {
           // AI returned workflow format - use it directly
           spec = {
             id: parsedJson.id || `workflow_${Date.now()}`,
@@ -416,6 +435,58 @@ export class UnifiedCommandParser implements CommandParser {
   }
 
   private isValidAIResponse(response: any): boolean {
+    // Check if it has batch format
+    if (response.testType === "batch" && response.batch) {
+      const batch = response.batch;
+
+      // Validate batch structure
+      if (
+        !batch.tests ||
+        !Array.isArray(batch.tests) ||
+        batch.tests.length === 0
+      ) {
+        return false;
+      }
+
+      if (
+        !batch.executionMode ||
+        !["parallel", "sequential"].includes(batch.executionMode)
+      ) {
+        return false;
+      }
+
+      // Validate each test in the batch
+      for (const test of batch.tests) {
+        if (!test.id || !test.name || !test.testType || !test.requests) {
+          return false;
+        }
+
+        if (!Array.isArray(test.requests) || test.requests.length === 0) {
+          return false;
+        }
+
+        // Validate first request in each test
+        const firstRequest = test.requests[0];
+        if (!firstRequest.method || !firstRequest.url) {
+          return false;
+        }
+
+        // Check for valid HTTP method
+        const validMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+        if (!validMethods.includes(firstRequest.method.toUpperCase())) {
+          return false;
+        }
+
+        // Check for valid URL format
+        try {
+          new URL(firstRequest.url);
+        } catch {
+          return false;
+        }
+      }
+      return true; // Batch format is valid
+    }
+
     // Check if it has workflow format
     if (response.workflow && Array.isArray(response.workflow)) {
       // For workflows, we need to validate the workflow structure
@@ -693,6 +764,65 @@ export class UnifiedCommandParser implements CommandParser {
     if (!hasLoadPattern) {
       console.log("❌ Failed: Missing loadPattern");
       return false;
+    }
+
+    // Check if it's a batch test
+    if (spec.testType === "batch" && spec.batch) {
+      // Validate batch structure
+      const batch = spec.batch;
+
+      if (
+        !batch.tests ||
+        !Array.isArray(batch.tests) ||
+        batch.tests.length === 0
+      ) {
+        console.log("❌ Failed: Batch missing tests array");
+        return false;
+      }
+
+      if (
+        !batch.executionMode ||
+        !["parallel", "sequential"].includes(batch.executionMode)
+      ) {
+        console.log("❌ Failed: Invalid batch execution mode");
+        return false;
+      }
+
+      // Validate each test in the batch
+      for (const test of batch.tests) {
+        if (!test.id || !test.name || !test.testType || !test.requests) {
+          console.log("❌ Failed: Invalid batch test structure");
+          return false;
+        }
+
+        if (!Array.isArray(test.requests) || test.requests.length === 0) {
+          console.log("❌ Failed: Batch test missing requests");
+          return false;
+        }
+
+        // Validate first request in each test
+        const firstRequest = test.requests[0];
+        if (!firstRequest.method || !firstRequest.url) {
+          console.log("❌ Failed: Invalid request in batch test");
+          return false;
+        }
+
+        // Check for valid HTTP method
+        const validMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+        if (!validMethods.includes(firstRequest.method.toUpperCase())) {
+          console.log("❌ Failed: Invalid method in batch test");
+          return false;
+        }
+
+        // Check for valid URL format
+        try {
+          new URL(firstRequest.url);
+        } catch (e) {
+          console.log("❌ Failed: URL format invalid in batch test");
+          return false;
+        }
+      }
+      return true; // Batch is valid
     }
 
     // Check if it's a workflow test
