@@ -86,8 +86,12 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
               Object.keys(processedMedia.formData).forEach((key) => {
                 const field = processedMedia.formData[key];
                 if (field.value && field.options) {
-                  // This is a file
-                  formData.append(key, field.value, field.options);
+                  // This is a file - create a proper stream from buffer
+                  const { Readable } = require("stream");
+                  const stream = new Readable();
+                  stream.push(field.value);
+                  stream.push(null); // End the stream
+                  formData.append(key, stream, field.options);
                 } else {
                   // This is regular form data
                   formData.append(key, field);

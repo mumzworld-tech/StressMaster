@@ -55,7 +55,7 @@ Your task is to parse user commands and extract:
 - Media files for upload (if any)
 - Load pattern (constant, ramp-up, spike, step)
 - Test duration and virtual users
-- Test type (baseline, spike, stress, endurance, volume)
+- Test type (baseline, spike, stress, endurance, volume, batch)
 
 WORKFLOW SUPPORT:
 - Understand natural language patterns for sequences (first, then, next, finally, start by, etc.)
@@ -64,6 +64,19 @@ WORKFLOW SUPPORT:
 - Support mixed sequential and parallel workflows
 - Accept ANY format: bullet points (•), commas, semicolons, newlines, or plain text
 - Be flexible with input structure - adapt to user's natural way of writing
+
+BATCH TESTING SUPPORT:
+- Recognize batch commands: "batch test:", "test multiple APIs:", "parallel test:", "sequential test:"
+- Support multiple API endpoints in single command: "GET api1.com, POST api2.com, PUT api3.com"
+- Handle different load patterns per API: "100 requests to api1.com, 50 requests to api2.com"
+- Support mixed execution modes: "parallel batch:", "sequential batch:", "run in parallel:", "run sequentially:"
+- Support dynamic payloads: "increment user.id by 1", "random values for data.field"
+- Support execution options: "max 3 concurrent", "delay 5s between tests", "retry failed tests"
+- Support K6 configuration: "generate separate K6 scripts", "custom K6 options"
+- Support comprehensive reporting: "individual reports", "combined report", "include raw data"
+- Aggregate results from multiple APIs into unified report
+- Support batch with media: "POST api1.com with file: @data.json, GET api2.com/status"
+- Support assertions: "expect success rate > 95%", "max response time < 500ms"
 
 MEDIA SUPPORT:
 - Recognize file upload patterns: "file: @image.jpg", "avatar: @photo.png"
@@ -91,6 +104,7 @@ RULES:
 - Default to POST for requests with payloads or media, GET otherwise
 - Generate realistic test data (names, emails, IDs, etc.) instead of hardcoded values
 - For workflows, create a "workflow" array with steps
+- For batch tests, create a "batch" object with tests array
 - Be flexible with workflow structure - adapt to the user's intent
 
 SINGLE REQUEST OUTPUT:
@@ -746,6 +760,246 @@ Respond with only valid JSON, no additional text or explanation.`;
         },
       },
       description: "High-volume bulk data payload test",
+    },
+    {
+      input:
+        "batch test: GET https://api1.com/users, POST https://api2.com/orders, PUT https://api3.com/inventory",
+      output: {
+        id: "batch_" + Date.now(),
+        name: "Multi-API Batch Test",
+        description: "Batch test with multiple API endpoints",
+        testType: "batch",
+        requests: [], // Empty for batch tests
+        batch: {
+          id: "batch_" + Date.now(),
+          name: "Multi-API Batch Test",
+          description: "Batch test with multiple API endpoints",
+          tests: [
+            {
+              id: "test1_" + Date.now(),
+              name: "Users API Test",
+              description: "GET request to users API",
+              testType: "baseline",
+              requests: [
+                {
+                  method: "GET",
+                  url: "https://api1.com/users",
+                  headers: { "Content-Type": "application/json" },
+                },
+              ],
+              loadPattern: { type: "constant", virtualUsers: 10 },
+              duration: { value: 60, unit: "seconds" },
+            },
+            {
+              id: "test2_" + Date.now(),
+              name: "Orders API Test",
+              description: "POST request to orders API",
+              testType: "baseline",
+              requests: [
+                {
+                  method: "POST",
+                  url: "https://api2.com/orders",
+                  headers: { "Content-Type": "application/json" },
+                  body: { userId: "user123", items: [{ name: "Product 1" }] },
+                },
+              ],
+              loadPattern: { type: "constant", virtualUsers: 10 },
+              duration: { value: 60, unit: "seconds" },
+            },
+            {
+              id: "test3_" + Date.now(),
+              name: "Inventory API Test",
+              description: "PUT request to inventory API",
+              testType: "baseline",
+              requests: [
+                {
+                  method: "PUT",
+                  url: "https://api3.com/inventory",
+                  headers: { "Content-Type": "application/json" },
+                  body: { productId: "prod123", quantity: 5 },
+                },
+              ],
+              loadPattern: { type: "constant", virtualUsers: 10 },
+              duration: { value: 60, unit: "seconds" },
+            },
+          ],
+          executionMode: "parallel",
+          aggregationMode: "combined",
+        },
+        loadPattern: { type: "constant", virtualUsers: 30 },
+        duration: { value: 60, unit: "seconds" },
+      },
+      description: "Batch test with multiple APIs",
+    },
+    {
+      input:
+        "batch: 100 requests to https://api1.com/users, 50 requests to https://api2.com/orders",
+      output: {
+        id: "batch_" + Date.now(),
+        name: "Different Load Batch Test",
+        description: "Batch test with different load patterns",
+        testType: "batch",
+        requests: [], // Empty for batch tests
+        batch: {
+          id: "batch_" + Date.now(),
+          name: "Different Load Batch Test",
+          description: "Batch test with different load patterns",
+          tests: [
+            {
+              id: "test1_" + Date.now(),
+              name: "Users API Test",
+              description: "100 requests to users API",
+              testType: "baseline",
+              requests: [
+                {
+                  method: "GET",
+                  url: "https://api1.com/users",
+                  headers: { "Content-Type": "application/json" },
+                },
+              ],
+              loadPattern: { type: "constant", virtualUsers: 100 },
+              duration: { value: 60, unit: "seconds" },
+            },
+            {
+              id: "test2_" + Date.now(),
+              name: "Orders API Test",
+              description: "50 requests to orders API",
+              testType: "baseline",
+              requests: [
+                {
+                  method: "GET",
+                  url: "https://api2.com/orders",
+                  headers: { "Content-Type": "application/json" },
+                },
+              ],
+              loadPattern: { type: "constant", virtualUsers: 50 },
+              duration: { value: 60, unit: "seconds" },
+            },
+          ],
+          executionMode: "sequential",
+          aggregationMode: "combined",
+        },
+        loadPattern: { type: "constant", virtualUsers: 150 },
+        duration: { value: 60, unit: "seconds" },
+      },
+      description: "Batch test with different request counts",
+    },
+    {
+      input:
+        "sequential batch: 20 requests to https://api1.com/get, 15 requests to https://api2.com/post with dynamic payload increment user.id by 1, expect success rate > 95%",
+      output: {
+        id: "batch_" + Date.now(),
+        name: "Sequential Batch with Dynamic Payloads",
+        description:
+          "Sequential batch test with dynamic payloads and assertions",
+        testType: "batch",
+        requests: [],
+        batch: {
+          id: "batch_" + Date.now(),
+          name: "Sequential Batch with Dynamic Payloads",
+          description:
+            "Sequential batch test with dynamic payloads and assertions",
+          executionMode: "sequential",
+          dynamicPayloads: {
+            enabled: true,
+            incrementStrategy: "linear",
+            baseValues: { "user.id": 1 },
+            incrementRules: [
+              {
+                fieldPath: "user.id",
+                incrementType: "number",
+                incrementValue: 1,
+              },
+            ],
+          },
+          tests: [
+            {
+              id: "test1_" + Date.now(),
+              name: "GET API Test",
+              description: "20 requests to GET API",
+              testType: "baseline",
+              requests: [{ method: "GET", url: "https://api1.com/get" }],
+              loadPattern: { type: "constant", virtualUsers: 20 },
+              assertions: [
+                {
+                  name: "Success Rate",
+                  type: "success_rate",
+                  condition: "greater_than",
+                  expectedValue: 0.95,
+                },
+              ],
+            },
+            {
+              id: "test2_" + Date.now(),
+              name: "POST API Test",
+              description: "15 requests to POST API",
+              testType: "baseline",
+              requests: [{ method: "POST", url: "https://api2.com/post" }],
+              loadPattern: { type: "constant", virtualUsers: 15 },
+              assertions: [
+                {
+                  name: "Success Rate",
+                  type: "success_rate",
+                  condition: "greater_than",
+                  expectedValue: 0.95,
+                },
+              ],
+            },
+          ],
+          aggregationMode: "combined",
+        },
+        loadPattern: { type: "constant", virtualUsers: 35 },
+        duration: { value: 60, unit: "seconds" },
+      },
+      description: "Sequential batch with dynamic payloads and assertions",
+    },
+    {
+      input:
+        "parallel batch with K6 scripts: 100 requests to https://api1.com/get, 75 requests to https://api2.com/post, max 3 concurrent, generate individual reports",
+      output: {
+        id: "batch_" + Date.now(),
+        name: "Parallel Batch with K6 and Reports",
+        description:
+          "Parallel batch test with K6 scripts and individual reports",
+        testType: "batch",
+        requests: [],
+        batch: {
+          id: "batch_" + Date.now(),
+          name: "Parallel Batch with K6 and Reports",
+          description:
+            "Parallel batch test with K6 scripts and individual reports",
+          executionMode: "parallel",
+          executionOptions: { parallelConcurrency: 3 },
+          k6Config: { generateSeparateScripts: true },
+          reporting: {
+            generateIndividualReports: true,
+            combinedReportFormat: "html",
+            includeRawData: false,
+          },
+          tests: [
+            {
+              id: "test1_" + Date.now(),
+              name: "GET API Test",
+              description: "100 requests to GET API",
+              testType: "baseline",
+              requests: [{ method: "GET", url: "https://api1.com/get" }],
+              loadPattern: { type: "constant", virtualUsers: 100 },
+            },
+            {
+              id: "test2_" + Date.now(),
+              name: "POST API Test",
+              description: "75 requests to POST API",
+              testType: "baseline",
+              requests: [{ method: "POST", url: "https://api2.com/post" }],
+              loadPattern: { type: "constant", virtualUsers: 75 },
+            },
+          ],
+          aggregationMode: "combined",
+        },
+        loadPattern: { type: "constant", virtualUsers: 175 },
+        duration: { value: 60, unit: "seconds" },
+      },
+      description: "Parallel batch with K6 scripts and reporting",
     },
   ];
 

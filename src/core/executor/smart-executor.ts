@@ -2,6 +2,8 @@ import { LoadTestSpec, TestResult } from "../../types";
 import { BasicHttpExecutor } from "./simple-http-executor";
 import { K6LoadExecutor } from "./k6-executor";
 import { WorkflowExecutor } from "./workflow-executor";
+import { BatchExecutor } from "./batch-executor";
+import { EnhancedBatchExecutor } from "./batch";
 
 export interface SmartExecutor {
   executeLoadTest(spec: LoadTestSpec): Promise<TestResult>;
@@ -11,11 +13,15 @@ export class SmartLoadExecutor implements SmartExecutor {
   private simpleExecutor: BasicHttpExecutor;
   private k6Executor: K6LoadExecutor;
   private workflowExecutor: WorkflowExecutor;
+  private batchExecutor: BatchExecutor;
+  private enhancedBatchExecutor: EnhancedBatchExecutor;
 
   constructor() {
     this.simpleExecutor = new BasicHttpExecutor();
     this.k6Executor = new K6LoadExecutor();
     this.workflowExecutor = new WorkflowExecutor();
+    this.batchExecutor = new BatchExecutor();
+    this.enhancedBatchExecutor = new EnhancedBatchExecutor();
   }
 
   async executeLoadTest(spec: LoadTestSpec): Promise<TestResult> {
@@ -23,7 +29,9 @@ export class SmartLoadExecutor implements SmartExecutor {
 
     console.log(`🤖 Using ${executorType} executor for this test`);
 
-    if (executorType === "workflow") {
+    if (executorType === "batch") {
+      return await this.executeBatchTest(spec);
+    } else if (executorType === "workflow") {
       return await this.workflowExecutor.executeWorkflow(spec);
     } else if (executorType === "simple") {
       return await this.simpleExecutor.executeLoadTest(spec);
@@ -40,7 +48,100 @@ export class SmartLoadExecutor implements SmartExecutor {
     }
   }
 
-  private selectExecutor(spec: LoadTestSpec): "simple" | "k6" | "workflow" {
+  private async executeBatchTest(spec: LoadTestSpec): Promise<TestResult> {
+    if (!spec.batch) {
+      throw new Error("Batch specification is required for batch tests");
+    }
+
+    console.log(`🚀 Executing batch test: ${spec.batch.name}`);
+    console.log(
+      `📊 Batch mode: ${spec.batch.executionMode}, Tests: ${spec.batch.tests.length}`
+    );
+
+    const batchResult = await this.enhancedBatchExecutor.executeBatch(
+      spec.batch
+    );
+
+    // Convert batch result to TestResult format
+    return {
+      id: spec.id,
+      spec: spec,
+      status:
+        batchResult.status === "partial" ? "completed" : batchResult.status,
+      startTime: batchResult.startTime,
+      endTime: batchResult.endTime,
+      metrics: {
+        totalRequests: batchResult.aggregatedMetrics.totalRequests,
+        successfulRequests: batchResult.aggregatedMetrics.successfulRequests,
+        failedRequests: batchResult.aggregatedMetrics.failedRequests,
+        responseTime: {
+          min: batchResult.aggregatedMetrics.minResponseTime,
+          max: batchResult.aggregatedMetrics.maxResponseTime,
+          avg: batchResult.aggregatedMetrics.averageResponseTime,
+          p50: batchResult.aggregatedMetrics.p50ResponseTime,
+          p90: batchResult.aggregatedMetrics.p90ResponseTime,
+          p95: batchResult.aggregatedMetrics.p95ResponseTime,
+          p99: batchResult.aggregatedMetrics.p95ResponseTime, // Use p95 as p99 approximation
+        },
+        throughput: {
+          requestsPerSecond: batchResult.aggregatedMetrics.requestsPerSecond,
+          bytesPerSecond: 0, // Not available in batch results
+        },
+        errorRate: batchResult.aggregatedMetrics.errorRate,
+      },
+      errors: [], // No detailed error summary in batch results
+      recommendations: this.generateBatchRecommendations(batchResult),
+      rawData: {
+        k6Output: null,
+        executionLogs: [
+          `Batch execution completed with ${batchResult.successfulTests}/${batchResult.totalTests} successful tests`,
+        ],
+        systemMetrics: [],
+      },
+    };
+  }
+
+  private generateBatchRecommendations(batchResult: any): string[] {
+    const recommendations = [];
+
+    if (batchResult.failedTests > 0) {
+      recommendations.push(
+        `⚠️ ${batchResult.failedTests} out of ${batchResult.totalTests} tests failed`
+      );
+    }
+
+    if (batchResult.aggregatedMetrics.successRate < 0.95) {
+      recommendations.push(
+        "📉 Overall success rate is below 95% - consider investigating failures"
+      );
+    }
+
+    if (batchResult.aggregatedMetrics.avgResponseTime > 1000) {
+      recommendations.push(
+        "🐌 Average response time is high - consider performance optimization"
+      );
+    }
+
+    recommendations.push(
+      `✅ Batch execution completed with ${batchResult.successfulTests}/${batchResult.totalTests} successful tests`
+    );
+
+    return recommendations;
+  }
+
+  private selectExecutor(
+    spec: LoadTestSpec
+  ): "simple" | "k6" | "workflow" | "batch" {
+    // Check if this is a batch test
+    if (spec.testType === "batch" || spec.batch) {
+      console.log(
+        `📦 Batch executor selected: ${spec.batch?.tests.length || 0} tests, ${
+          spec.batch?.executionMode || "parallel"
+        } mode`
+      );
+      return "batch";
+    }
+
     const requestCount = spec.loadPattern.virtualUsers || 1;
     const loadPatternType = spec.loadPattern.type;
     const testType = spec.testType;

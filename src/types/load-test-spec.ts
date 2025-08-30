@@ -14,11 +14,128 @@ export interface LoadTestSpec {
 
   requests: RequestSpec[];
   workflow?: WorkflowStep[];
+  batch?: BatchTestSpec; // New: Batch testing support
   loadPattern: LoadPattern;
   duration: Duration;
 
   // For multi-step scenarios
   dataCorrelation?: CorrelationRule[];
+}
+
+// Enhanced: Batch test specification
+export interface BatchTestSpec {
+  id: string;
+  name: string;
+  description: string;
+  tests: BatchTestItem[];
+  executionMode: "parallel" | "sequential";
+  aggregationMode: "combined" | "separate";
+  globalLoadPattern?: LoadPattern; // Optional global load pattern
+  globalDuration?: Duration; // Optional global duration
+
+  // Enhanced features
+  executionOptions?: {
+    parallelConcurrency?: number; // Max concurrent tests (for parallel mode)
+    sequentialDelay?: Duration; // Delay between sequential tests
+    retryFailedTests?: boolean; // Retry failed tests
+    maxRetries?: number; // Maximum retry attempts
+  };
+
+  // Dynamic payload configuration
+  dynamicPayloads?: {
+    enabled: boolean;
+    incrementStrategy: "linear" | "exponential" | "random";
+    baseValues: Record<string, any>; // Base values for dynamic fields
+    incrementRules: DynamicIncrementRule[];
+  };
+
+  // K6 specific configuration
+  k6Config?: {
+    generateSeparateScripts: boolean; // Generate separate K6 script for each test
+    scriptOutputDir?: string; // Directory for K6 scripts
+    customK6Options?: Record<string, any>; // Custom K6 options
+  };
+
+  // Reporting configuration
+  reporting?: {
+    generateIndividualReports: boolean; // Generate individual test reports
+    combinedReportFormat: "html" | "json" | "csv" | "all";
+    includeRawData: boolean; // Include raw response data in reports
+    customMetrics?: string[]; // Custom metrics to track
+  };
+}
+
+// Enhanced: Individual batch test item
+export interface BatchTestItem {
+  id: string;
+  name: string;
+  description: string;
+  testType: TestType;
+  requests: RequestSpec[];
+  workflow?: WorkflowStep[];
+  loadPattern?: LoadPattern; // Per-test load pattern (overrides global)
+  duration?: Duration; // Per-test duration (overrides global)
+  weight?: number; // Relative weight for resource allocation (1-100)
+  priority?: "high" | "medium" | "low"; // Execution priority
+
+  // Enhanced features
+  executionOrder?: number; // Order for sequential execution
+  dependencies?: string[]; // Test IDs this test depends on
+
+  // Dynamic payload overrides
+  dynamicPayloadOverrides?: {
+    enabled: boolean;
+    customIncrements?: Record<string, DynamicIncrementRule>;
+    payloadVariables?: Record<string, any>; // Test-specific payload variables
+  };
+
+  // K6 specific overrides
+  k6Overrides?: {
+    customScript?: string; // Custom K6 script content
+    customOptions?: Record<string, any>; // Custom K6 options for this test
+  };
+
+  // Validation and assertions
+  assertions?: BatchTestAssertion[];
+  expectedResults?: {
+    minSuccessRate: number;
+    maxResponseTime: number;
+    expectedThroughput: number;
+  };
+}
+
+// New: Dynamic increment rule for payload values
+export interface DynamicIncrementRule {
+  fieldPath: string; // JSON path to the field (e.g., "user.id", "data.items[0].value")
+  incrementType: "number" | "string" | "uuid" | "timestamp" | "random";
+  startValue?: any; // Starting value
+  incrementValue?: any; // Value to increment by
+  maxValue?: any; // Maximum value (for number types)
+  format?: string; // Format string (for timestamp, string types)
+  randomRange?: {
+    min: any;
+    max: any;
+  }; // Range for random values
+}
+
+// New: Batch test assertion
+export interface BatchTestAssertion {
+  name: string;
+  type:
+    | "response_time"
+    | "success_rate"
+    | "throughput"
+    | "error_rate"
+    | "custom";
+  condition:
+    | "less_than"
+    | "greater_than"
+    | "equals"
+    | "not_equals"
+    | "contains";
+  expectedValue: any;
+  tolerance?: number; // Tolerance for numeric comparisons
+  customExpression?: string; // Custom assertion expression
 }
 
 export interface RequestSpec {

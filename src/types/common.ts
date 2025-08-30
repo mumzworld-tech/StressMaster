@@ -15,7 +15,8 @@ export type TestType =
   | "endurance"
   | "volume"
   | "baseline"
-  | "workflow";
+  | "workflow"
+  | "batch";
 
 export type LoadPatternType =
   | "constant"
