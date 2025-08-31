@@ -570,7 +570,12 @@ export default function() {
   }
 
   private generateOptions(loadPattern: any): string {
-    const targetRequests = loadPattern.virtualUsers || 10;
+    // Use smart defaults based on load pattern type
+    let defaultVUs = 1; // Default for simple patterns
+    if (['spike', 'ramp-up', 'random-burst'].includes(loadPattern.type)) {
+      defaultVUs = 10; // Use higher defaults for complex patterns
+    }
+    const targetRequests = loadPattern.virtualUsers || defaultVUs;
 
     // For demo/development: use iterations for exact request count
     if (loadPattern.type === "spike") {
@@ -607,6 +612,7 @@ export default function() {
   }
 
   private generateRandomBurstStages(loadPattern: any): string {
+    // Use higher default for burst patterns
     const targetVUs = loadPattern.virtualUsers || 10;
 
     // Development-friendly short burst test

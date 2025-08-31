@@ -12,6 +12,8 @@ export interface ParseCacheConfig {
 interface CacheEntry {
   spec: LoadTestSpec;
   timestamp: number;
+  fileDependencies?: string[];
+  fileModTimes?: Record<string, number>;
 }
 
 export class ParseCache {
@@ -53,11 +55,28 @@ export class ParseCache {
       return null;
     }
 
+    // Check if file dependencies are still valid
+    if (!this.areFileDependenciesValid(entry)) {
+      console.log(`🗂️  Invalidating cache due to file changes: ${key}`);
+      this.cache.delete(key);
+      this.saveToDisk(); // Save after cleanup
+      return null;
+    }
+
     return entry.spec;
   }
 
-  set(key: string, spec: LoadTestSpec): void {
-    // Check cache size limit
+  set(key: string, spec: LoadTestSpec, fileDependencies?: string[]): void {
+    // Check cache size limit and entry size
+    const specSize = JSON.stringify(spec).length;
+    const maxEntrySize = 10000; // 10KB limit per entry
+    
+    // Skip caching very large entries (like complex batch tests)
+    if (specSize > maxEntrySize) {
+      console.log(`📦 Skipping cache for large entry (${(specSize/1024).toFixed(1)}KB): ${key}`);
+      return;
+    }
+    
     if (this.cache.size >= this.config.maxSize) {
       // Remove oldest entry
       const oldestKey = this.cache.keys().next().value;
@@ -69,6 +88,8 @@ export class ParseCache {
     this.cache.set(key, {
       spec,
       timestamp: Date.now(),
+      fileDependencies,
+      fileModTimes: fileDependencies ? this.getFileModTimes(fileDependencies) : undefined,
     });
 
     // Save to disk if persistent
@@ -150,7 +171,50 @@ export class ParseCache {
     return this.cacheFilePath;
   }
 
-  // Get cache statistics
+  // Get file modification times for dependency tracking
+  private getFileModTimes(fileDependencies: string[]): Record<string, number> {
+    const fileModTimes: Record<string, number> = {};
+    for (const filePath of fileDependencies) {
+      try {
+        if (fs.existsSync(filePath)) {
+          fileModTimes[filePath] = fs.statSync(filePath).mtime.getTime();
+        }
+      } catch (error) {
+        console.warn(`⚠️ Error getting mod time for ${filePath}: ${error}`);
+      }
+    }
+    return fileModTimes;
+  }
+
+  // Check if file dependencies are still valid
+  private areFileDependenciesValid(entry: CacheEntry): boolean {
+    if (!entry.fileDependencies || !entry.fileModTimes) {
+      return true; // No file dependencies to check
+    }
+
+    try {
+      for (const filePath of entry.fileDependencies) {
+        if (fs.existsSync(filePath)) {
+          const currentModTime = fs.statSync(filePath).mtime.getTime();
+          const cachedModTime = entry.fileModTimes[filePath];
+          
+          if (!cachedModTime || currentModTime > cachedModTime) {
+            console.log(`🗂️  File dependency changed: ${filePath}`);
+            return false; // File has been modified
+          }
+        } else {
+          console.log(`🗂️  File dependency missing: ${filePath}`);
+          return false; // File no longer exists
+        }
+      }
+      return true;
+    } catch (error) {
+      console.warn(`⚠️ Error checking file dependencies: ${error}`);
+      return false; // Assume invalid on error
+    }
+  }
+
+    // Get cache statistics
   getStats(): {
     size: number;
     filePath: string;

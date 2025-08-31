@@ -116,9 +116,7 @@ export class UnifiedCommandParser implements CommandParser {
       for (const variantKey of variantKeys) {
         cachedResult = this.parseCache.get(variantKey);
         if (cachedResult) {
-          console.log("📋 Using cached parse result (semantic match)");
-          console.log(`🔍 Matched variant key: ${variantKey}`);
-          console.log(`📊 Cache size: ${this.parseCache.size()}`);
+          // Using cached result (semantic match)
 
           // Adapt cached result to current command parameters
           const adaptedResult = this.adaptCachedResult(cachedResult, input);
@@ -126,20 +124,14 @@ export class UnifiedCommandParser implements CommandParser {
         }
       }
     } else {
-      console.log("📋 Using cached parse result (exact match)");
-      console.log(`🔍 Cache key: ${cacheKey}`);
-      console.log(`📊 Cache size: ${this.parseCache.size()}`);
+      // Using cached result (exact match)
 
       // Adapt cached result to current command parameters
       const adaptedResult = this.adaptCachedResult(cachedResult, input);
       return adaptedResult;
     }
 
-    console.log("🔄 Cache miss, making AI call");
-    console.log(`🔍 Cache key: ${cacheKey}`);
-    console.log(
-      `🔍 Normalized: ${this.normalizeCommand(input.toLowerCase().trim())}`
-    );
+    // Cache miss, making AI call
 
     const usedCacheKey = cacheKey;
 
@@ -164,7 +156,7 @@ export class UnifiedCommandParser implements CommandParser {
       // Try AI parsing first
       if (this.isReady) {
         try {
-          console.log("🤖 Attempting AI parsing...");
+          // Attempting AI parsing...
           const aiResult = await this.parseWithAI(input);
 
           // Validate AI result quality
@@ -185,7 +177,9 @@ export class UnifiedCommandParser implements CommandParser {
               );
 
               // Cache the successful result
-              this.parseCache.set(usedCacheKey, enhancedSpec);
+              // Extract OpenAPI file dependencies for cache invalidation
+              const fileDependencies = this.extractOpenAPIFilePaths(input);
+              this.parseCache.set(usedCacheKey, enhancedSpec, fileDependencies);
 
               return enhancedSpec;
             } catch (enhanceError) {
@@ -275,8 +269,7 @@ export class UnifiedCommandParser implements CommandParser {
       try {
         const parsedJson = JSON.parse(response.response);
 
-        // Debug: Log what the AI returned
-        console.log("🔍 AI Response:", JSON.stringify(parsedJson, null, 2));
+        // AI response received
 
         // Validate the AI response structure
         if (!this.isValidAIResponse(parsedJson)) {
@@ -457,7 +450,7 @@ export class UnifiedCommandParser implements CommandParser {
 
       // Validate each test in the batch
       for (const test of batch.tests) {
-        if (!test.id || !test.name || !test.testType || !test.requests) {
+        if (!test.id || !test.name || !test.requests) {
           return false;
         }
 
@@ -573,6 +566,20 @@ export class UnifiedCommandParser implements CommandParser {
   /**
    * Detect if the input contains an OpenAPI file reference
    */
+  /**
+   * Extract OpenAPI file paths from input for cache dependency tracking
+   */
+  private extractOpenAPIFilePaths(input: string): string[] {
+    const filePaths: string[] = [];
+    const fileMatches = input.matchAll(/@([\w\-_\/]+\.(yaml|yml|json))/gi);
+
+    for (const match of fileMatches) {
+      filePaths.push(match[1]);
+    }
+
+    return filePaths;
+  }
+
   private detectOpenAPIFile(input: string): boolean {
     const openAPIPatterns = [
       /@[\w\-_\/]+\.(yaml|yml|json)/i,
@@ -790,7 +797,7 @@ export class UnifiedCommandParser implements CommandParser {
 
       // Validate each test in the batch
       for (const test of batch.tests) {
-        if (!test.id || !test.name || !test.testType || !test.requests) {
+        if (!test.id || !test.name || !test.requests) {
           console.log("❌ Failed: Invalid batch test structure");
           return false;
         }
@@ -1077,13 +1084,16 @@ export class UnifiedCommandParser implements CommandParser {
   }
 
   private generateCacheKey(input: string): string {
-    // Smart semantic cache key generation
-    // Normalize similar commands to use the same cache entry
+    // Enhanced cache key generation to prevent collisions
+    // Include domain information to differentiate between different endpoints
 
     const normalized = this.normalizeCommand(input.toLowerCase().trim());
 
     // Extract HTTP method for cache key differentiation
     const httpMethod = this.extractHttpMethod(input);
+
+    // Extract domain for better cache differentiation
+    const domain = this.extractDomain(input);
 
     // Simple hash function for the normalized command
     let hash = 0;
@@ -1091,8 +1101,15 @@ export class UnifiedCommandParser implements CommandParser {
       hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
     }
 
-    // Include HTTP method in cache key to prevent collisions
-    return `cmd:${httpMethod}:${hash}`;
+    // Include HTTP method and domain in cache key to prevent collisions
+    return `cmd:${httpMethod}:${domain}:${hash}`;
+  }
+
+  private extractDomain(input: string): string {
+    // Extract domain from URL for cache key differentiation
+    const urlMatch = input.match(/https?:\/\/([^\/\s]+)/);
+
+    return urlMatch ? urlMatch[1] : "localhost";
   }
 
   private normalizeCommand(input: string): string {

@@ -235,14 +235,18 @@ export class EnhancedBatchExecutor {
 
         // Execute the test using the appropriate executor
         let result: TestResult;
+        
         if (test.testType === "workflow" || test.workflow) {
+          
           result = await this.workflowExecutor.executeWorkflow(loadTestSpec);
         } else if (
           loadTestSpec.loadPattern.virtualUsers &&
           loadTestSpec.loadPattern.virtualUsers > 50
         ) {
+          
           result = await this.k6Executor.executeLoadTest(loadTestSpec);
         } else {
+          
           result = await this.simpleExecutor.executeLoadTest(loadTestSpec);
         }
 

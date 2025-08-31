@@ -273,7 +273,7 @@ export class InteractiveCLI implements CLIInterface {
         chalk.gray("   ┌─ Test Type: ") + chalk.white.bold(spec.testType)
       );
 
-      // Handle workflow tests differently
+      // Handle different test types
       if (
         spec.testType === "workflow" &&
         spec.workflow &&
@@ -296,14 +296,32 @@ export class InteractiveCLI implements CLIInterface {
           chalk.gray("   └─ Request Count: ") +
             chalk.white.bold(spec.loadPattern.virtualUsers)
         );
+      } else if (spec.testType === "batch" && spec.batch) {
+        // Handle batch tests
+        console.log(
+          chalk.gray("   ├─ Batch Tests: ") +
+            chalk.white.bold(spec.batch.tests.length)
+        );
+        console.log(
+          chalk.gray("   ├─ Execution Mode: ") +
+            chalk.white.bold(spec.batch.executionMode)
+        );
+        const totalRequests = spec.batch.tests.reduce((sum, test) => 
+          sum + (test.loadPattern?.virtualUsers || 1), 0
+        );
+        console.log(
+          chalk.gray("   └─ Total Requests: ") +
+            chalk.white.bold(totalRequests)
+        );
       } else {
+        // Handle single tests
         console.log(
           chalk.gray("   ├─ Target URL: ") +
-            chalk.white.bold(spec.requests[0]?.url)
+            chalk.white.bold(spec.requests[0]?.url || "N/A")
         );
         console.log(
           chalk.gray("   ├─ HTTP Method: ") +
-            chalk.white.bold(spec.requests[0]?.method)
+            chalk.white.bold(spec.requests[0]?.method || "N/A")
         );
         console.log(
           chalk.gray("   └─ Request Count: ") +

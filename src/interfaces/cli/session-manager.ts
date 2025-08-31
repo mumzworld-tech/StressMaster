@@ -75,7 +75,7 @@ export class SessionManager {
     );
     console.log(
       chalk.blue.bold(
-        "║                    🚀 StressMaster                          ║"
+        "║                   🚀 StressMaster                           ║"
       )
     );
     console.log(

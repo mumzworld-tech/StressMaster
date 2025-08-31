@@ -89,14 +89,45 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
                   // This is a file - create a proper stream from buffer
                   const { Readable } = require("stream");
                   const stream = Readable.from(field.value);
-                  // stream.push(field.value);
-                  // stream.push(null); // End the stream
                   formData.append(key, stream, field.options);
                 } else {
                   // This is regular form data
                   formData.append(key, field);
                 }
               });
+
+              // Add JSON body data to form data if present
+              if (request.body) {
+                console.log('🔍 Adding request body to form data:', request.body);
+                // If body is JSON, add each field to form data
+                if (typeof request.body === 'object') {
+                  Object.keys(request.body).forEach((key) => {
+                    console.log(`🔍 Adding form field: ${key} = ${request.body[key]}`);
+                    formData.append(key, request.body[key]);
+                  });
+                } else if (typeof request.body === 'string') {
+                  // If body is a string, try to parse as JSON
+                  try {
+                    const bodyObj = JSON.parse(request.body);
+                    Object.keys(bodyObj).forEach((key) => {
+                      console.log(`🔍 Adding form field: ${key} = ${bodyObj[key]}`);
+                      formData.append(key, bodyObj[key]);
+                    });
+                  } catch (e) {
+                    // If not JSON, add as a single field
+                    console.log('🔍 Adding string body as data field');
+                    formData.append('data', request.body);
+                  }
+                }
+              } else if (request.payload) {
+                // Generate body from payload and add to form data
+                const bodyData = await this.generateRequestBody(request.payload, i);
+                if (typeof bodyData === 'object') {
+                  Object.keys(bodyData).forEach((key) => {
+                    formData.append(key, bodyData[key]);
+                  });
+                }
+              }
 
               requestData = formData;
               // FormData will set its own Content-Type with boundary
@@ -365,7 +396,27 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
 
       // Replace template variables with actual values
       if (payload.variables) {
-        payload.variables.forEach((variable: any) => {
+        // Deduplicate variables by name (keep the one with the most complete parameters)
+        const variableMap = new Map<string, any>();
+        for (const variable of payload.variables) {
+          const name = variable.name;
+          if (!variableMap.has(name)) {
+            variableMap.set(name, variable);
+          } else {
+            const existing = variableMap.get(name);
+            const existingParams = existing.parameters || {};
+            const newParams = variable.parameters || {};
+            if (newParams.baseValue && !existingParams.baseValue) {
+              variableMap.set(name, variable);
+            } else if (newParams.baseValue && existingParams.baseValue) {
+              if (newParams.baseValue.length > existingParams.baseValue.length) {
+                variableMap.set(name, variable);
+              }
+            }
+          }
+        }
+        const deduplicatedVariables = Array.from(variableMap.values());
+        deduplicatedVariables.forEach((variable: any) => {
           const value = this.generateVariableValue(
             variable.type,
             variable.parameters,
