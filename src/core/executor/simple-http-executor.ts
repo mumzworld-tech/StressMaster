@@ -88,9 +88,9 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
                 if (field.value && field.options) {
                   // This is a file - create a proper stream from buffer
                   const { Readable } = require("stream");
-                  const stream = new Readable();
-                  stream.push(field.value);
-                  stream.push(null); // End the stream
+                  const stream = Readable.from(field.value);
+                  // stream.push(field.value);
+                  // stream.push(null); // End the stream
                   formData.append(key, stream, field.options);
                 } else {
                   // This is regular form data
