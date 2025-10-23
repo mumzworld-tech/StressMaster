@@ -249,8 +249,9 @@ export class APIEnhancer {
     }
 
     // Detect API versioning patterns - only if URL doesn't already have a version path
-    if (input.match(/v\d+|version\s+\d+/i) && spec.requests[0].url) {
-      const versionMatch = input.match(/v(\d+)|version\s+(\d+)/i);
+    // Use word boundaries to avoid matching version numbers within other strings (like API keys)
+    if (input.match(/\bv\d+\b|version\s+\d+/i) && spec.requests[0].url) {
+      const versionMatch = input.match(/\bv(\d+)\b|version\s+(\d+)/i);
       if (versionMatch) {
         const version = versionMatch[1] || versionMatch[2];
         // Only add version if URL doesn't already contain a version path
