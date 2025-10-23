@@ -1,0 +1,17 @@
+---
+description:look my ui for sressmaster its very ugly and useless:
+
+So my idea is that of a chatbot and i work you to work like a senior frontend engineer for this with code qulaity and component structureing
+
+features incleude entering user commands for various types of loads tests like we are supporting on the CLI interface rn (all features)
+
+handle uploading/entering openapi, json , media and other files that may be required for the load test command:
+
+since its a chat bot users can directly enter large json bodies and openapi files in the chat itself so our AI needs to be able to understand because rn we use iles since terminal doesnt handle such big commands well
+
+I want it to have a theme, support for help and history, for a currwent session and also display results of tests appropriatelty and also uses export functionality that we have 
+
+think as a designer as well for themes and colors and designs, feel free to sue component libraries like chakra if needed but you can decide that. this needs to be robust and well managed.
+globs:
+alwaysApply: false
+---

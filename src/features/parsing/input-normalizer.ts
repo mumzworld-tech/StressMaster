@@ -97,8 +97,8 @@ export class InputNormalizer {
       let match;
       while ((match = pattern.exec(input)) !== null) {
         const num = parseInt(match[1]);
-        if (num > 0 && num <= 10000) {
-          // Reasonable range
+        if (num > 0 && num <= 100000) {
+          // Reasonable range - increased limit for high-volume tests
           numbers.push(num);
         }
       }

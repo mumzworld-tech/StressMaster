@@ -407,7 +407,7 @@ export class AdvancedErrorRecovery {
     const numbers = input.match(/\b(\d+)\b/g);
     if (numbers && numbers.length === 1) {
       const num = parseInt(numbers[0]);
-      if (num > 0 && num <= 10000) {
+      if (num > 0 && num <= 100000) {
         return num;
       }
     }
