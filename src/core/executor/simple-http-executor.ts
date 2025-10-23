@@ -28,11 +28,11 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
     );
 
     // Calculate delay between requests
-    const durationMs = this.getDurationInMs(spec.duration);
+    const durationMs = spec.duration ? this.getDurationInMs(spec.duration) : 0;
 
-    // If duration is very short (like 1 minute) and no specific timing mentioned,
-    // execute requests more quickly for better user experience
-    const isQuickTest = durationMs <= 60000 && requestCount <= 50;
+    // If no duration specified, execute immediately with minimal delays
+    const isQuickTest =
+      !spec.duration || (durationMs <= 60000 && requestCount <= 50);
     const delayBetweenRequests = isQuickTest
       ? 100 // Small delay to avoid overwhelming the target
       : requestCount > 1
@@ -42,14 +42,16 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
     if (isQuickTest) {
       console.log(
         chalk.gray(
-          `⚡ Quick test mode: ${requestCount} requests with minimal delays`
+          `⚡ ${
+            spec.duration ? "Quick test mode" : "Immediate execution"
+          }: ${requestCount} requests with minimal delays`
         )
       );
     } else {
       console.log(
         chalk.gray(
           `⏱️  Spreading ${requestCount} requests over ${this.formatDuration(
-            spec.duration
+            spec.duration!
           )}`
         )
       );
@@ -98,31 +100,41 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
 
               // Add JSON body data to form data if present
               if (request.body) {
-                console.log('🔍 Adding request body to form data:', request.body);
+                console.log(
+                  "🔍 Adding request body to form data:",
+                  request.body
+                );
                 // If body is JSON, add each field to form data
-                if (typeof request.body === 'object') {
+                if (typeof request.body === "object") {
                   Object.keys(request.body).forEach((key) => {
-                    console.log(`🔍 Adding form field: ${key} = ${request.body[key]}`);
+                    console.log(
+                      `🔍 Adding form field: ${key} = ${request.body[key]}`
+                    );
                     formData.append(key, request.body[key]);
                   });
-                } else if (typeof request.body === 'string') {
+                } else if (typeof request.body === "string") {
                   // If body is a string, try to parse as JSON
                   try {
                     const bodyObj = JSON.parse(request.body);
                     Object.keys(bodyObj).forEach((key) => {
-                      console.log(`🔍 Adding form field: ${key} = ${bodyObj[key]}`);
+                      console.log(
+                        `🔍 Adding form field: ${key} = ${bodyObj[key]}`
+                      );
                       formData.append(key, bodyObj[key]);
                     });
                   } catch (e) {
                     // If not JSON, add as a single field
-                    console.log('🔍 Adding string body as data field');
-                    formData.append('data', request.body);
+                    console.log("🔍 Adding string body as data field");
+                    formData.append("data", request.body);
                   }
                 }
               } else if (request.payload) {
                 // Generate body from payload and add to form data
-                const bodyData = await this.generateRequestBody(request.payload, i);
-                if (typeof bodyData === 'object') {
+                const bodyData = await this.generateRequestBody(
+                  request.payload,
+                  i
+                );
+                if (typeof bodyData === "object") {
                   Object.keys(bodyData).forEach((key) => {
                     formData.append(key, bodyData[key]);
                   });
@@ -409,7 +421,9 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
             if (newParams.baseValue && !existingParams.baseValue) {
               variableMap.set(name, variable);
             } else if (newParams.baseValue && existingParams.baseValue) {
-              if (newParams.baseValue.length > existingParams.baseValue.length) {
+              if (
+                newParams.baseValue.length > existingParams.baseValue.length
+              ) {
                 variableMap.set(name, variable);
               }
             }

@@ -5,15 +5,29 @@
  */
 
 export function normalizeTimeUnit(timeStr: string): string {
-  const unit = timeStr.slice(-1).toLowerCase();
-  const value = timeStr.slice(0, -1);
-
-  if (unit === "s" || unit === "m" || unit === "h") {
-    return timeStr;
+  const unit = timeStr.toLowerCase().trim();
+  
+  // Handle full word units
+  if (unit === "second" || unit === "seconds" || unit === "sec" || unit === "secs") {
+    return "s";
+  }
+  if (unit === "minute" || unit === "minutes" || unit === "min" || unit === "mins") {
+    return "m";
+  }
+  if (unit === "hour" || unit === "hours" || unit === "hr" || unit === "hrs") {
+    return "h";
+  }
+  if (unit === "day" || unit === "days") {
+    return "d";
+  }
+  
+  // Handle single character units
+  if (unit === "s" || unit === "m" || unit === "h" || unit === "d") {
+    return unit;
   }
 
   // Default to seconds if no unit specified
-  return `${timeStr}s`;
+  return "s";
 }
 
 export function normalizeMethod(method: string): string {

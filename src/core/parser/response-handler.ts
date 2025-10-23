@@ -516,8 +516,8 @@ export class ResponseHandler {
 
     // Check for duration ambiguity
     if (
-      spec.duration.value === 1 &&
-      spec.duration.unit === "minutes" &&
+      spec.duration?.value === 1 &&
+      spec.duration?.unit === "minutes" &&
       !originalInput.toLowerCase().includes("minute")
     ) {
       ambiguities.push("Test duration was not specified, using default");

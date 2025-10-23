@@ -39,7 +39,10 @@ export class K6ScriptGenerator implements ScriptGenerator {
 
   generateScript(spec: LoadTestSpec): K6Script {
     const template = this.selectTemplate(spec);
-    const options = this.generateK6Options(spec.loadPattern, spec.duration);
+    const options = this.generateK6Options(
+      spec.loadPattern,
+      spec.duration || { value: 30, unit: "seconds" }
+    );
     const imports = this.generateImports(spec);
 
     // Generate the main script content

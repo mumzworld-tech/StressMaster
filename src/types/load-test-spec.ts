@@ -16,7 +16,7 @@ export interface LoadTestSpec {
   workflow?: WorkflowStep[];
   batch?: BatchTestSpec; // New: Batch testing support
   loadPattern: LoadPattern;
-  duration: Duration;
+  duration?: Duration; // Optional - if not specified, execute immediately
 
   // For multi-step scenarios
   dataCorrelation?: CorrelationRule[];

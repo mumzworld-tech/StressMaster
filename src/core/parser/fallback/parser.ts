@@ -80,10 +80,12 @@ export class FallbackParser {
           : ((loadInfo.testType || "baseline") as any),
         requests: [],
         loadPattern: loadInfo.loadPattern,
-        duration: {
-          value: loadInfo.duration.value,
-          unit: loadInfo.duration.unit as "seconds" | "minutes" | "hours",
-        },
+        duration: loadInfo.duration
+          ? {
+              value: loadInfo.duration.value,
+              unit: loadInfo.duration.unit as "seconds" | "minutes" | "hours",
+            }
+          : undefined,
       };
 
       // Handle workflow tests
@@ -510,7 +512,7 @@ export class FallbackParser {
 
   private extractLoadInfo(input: string): {
     loadPattern: LoadPattern;
-    duration: { value: number; unit: string };
+    duration: { value: number; unit: string } | null;
     testType?: string;
   } {
     // Extract test type
@@ -574,7 +576,7 @@ export class FallbackParser {
           value: parseInt(durationMatch[1]),
           unit: normalizeTimeUnit(durationMatch[2]),
         }
-      : { value: 60, unit: "s" };
+      : null; // No duration means execute immediately
 
     return { testType, loadPattern, duration };
   }
