@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "test:unit:watch": "vitest --config vitest.unit.config.ts",
     "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix"
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "backend": "tsx server.ts"
   },
   "keywords": [
     "load-testing",
@@ -36,8 +37,10 @@
     "chalk": "^4.1.2",
     "cli-table3": "^0.6.3",
     "commander": "^11.1.0",
+    "cors": "^2.8.5",
     "dockerode": "^4.0.7",
     "dotenv": "^17.2.1",
+    "express": "^5.1.0",
     "inquirer": "^9.2.0",
     "joi": "^17.11.0",
     "js-yaml": "^4.1.0",
@@ -46,6 +49,8 @@
     "ws": "^8.14.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
     "@types/inquirer": "^9.0.0",
     "@types/node": "^20.8.0",
     "@types/uuid": "^9.0.0",

@@ -169,53 +169,55 @@ export class SmartLoadExecutor implements SmartExecutor {
         }
       }
 
-      // Check if workflow has complex load patterns that should use K6
-      const hasComplexLoadPattern =
-        requestCount > 50 ||
-        totalWorkflowRequests > 50 ||
-        ["spike", "ramp-up", "random-burst"].includes(loadPatternType) ||
-        testType === "stress" ||
-        testType === "endurance" ||
-        testType === "volume";
+      // K6 DISABLED for workflows - always use workflow executor
+      // Original K6 selection logic (commented out):
+      // const hasComplexLoadPattern =
+      //   requestCount > 50 ||
+      //   totalWorkflowRequests > 50 ||
+      //   ["spike", "ramp-up", "random-burst"].includes(loadPatternType) ||
+      //   testType === "stress" ||
+      //   testType === "endurance" ||
+      //   testType === "volume";
 
-      if (hasComplexLoadPattern) {
-        console.log(
-          `📊 K6 selected for workflow: ${requestCount} global requests, ${totalWorkflowRequests} total workflow requests, ${loadPatternType} pattern, ${testType} test`
-        );
-        return "k6";
-      } else {
-        console.log(
-          `🔄 Workflow executor selected: ${testType} test with ${
-            spec.workflow?.length || 0
-          } workflow steps, ${totalWorkflowRequests} total requests`
-        );
-        return "workflow";
-      }
+      // if (hasComplexLoadPattern) {
+      //   console.log(
+      //     `📊 K6 selected for workflow: ${requestCount} global requests, ${totalWorkflowRequests} total workflow requests, ${loadPatternType} pattern, ${testType} test`
+      //   );
+      //   return "k6";
+      // } else {
+      console.log(
+        `🔄 Workflow executor selected (K6 disabled): ${testType} test with ${
+          spec.workflow?.length || 0
+        } workflow steps, ${totalWorkflowRequests} total requests`
+      );
+      return "workflow";
+      // }
     }
 
-    // Use K6 executor for non-workflow tests with:
+    // K6 DISABLED - Use simple executor for all tests to avoid virtual user limits
+    // Original K6 selection logic (commented out):
     // 1. Large request counts (>50)
     // 2. Complex load patterns (spike, ramp-up, random-burst)
     // 3. High-volume tests
     // 4. Stress/endurance tests
 
-    const shouldUseK6 =
-      requestCount > 50 ||
-      ["spike", "ramp-up", "random-burst"].includes(loadPatternType) ||
-      testType === "stress" ||
-      testType === "endurance" ||
-      testType === "volume";
+    // const shouldUseK6 =
+    //   requestCount > 50 ||
+    //   ["spike", "ramp-up", "random-burst"].includes(loadPatternType) ||
+    //   testType === "stress" ||
+    //   testType === "endurance" ||
+    //   testType === "volume";
 
-    if (shouldUseK6) {
-      console.log(
-        `📊 K6 selected: ${requestCount} requests, ${loadPatternType} pattern, ${testType} test`
-      );
-      return "k6";
-    } else {
-      console.log(
-        `⚡ Simple executor selected: ${requestCount} requests, ${loadPatternType} pattern, ${testType} test`
-      );
-      return "simple";
-    }
+    // if (shouldUseK6) {
+    //   console.log(
+    //     `📊 K6 selected: ${requestCount} requests, ${loadPatternType} pattern, ${testType} test`
+    //   );
+    //   return "k6";
+    // } else {
+    console.log(
+      `⚡ Simple executor selected (K6 disabled): ${requestCount} requests, ${loadPatternType} pattern, ${testType} test`
+    );
+    return "simple";
+    // }
   }
 }
