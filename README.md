@@ -50,38 +50,36 @@ StressMaster supports multiple AI providers for natural language parsing:
 
 ### 1. Installation
 
-#### Option A: Global Installation (Recommended)
+#### Option A: NPM Global Installation (Recommended)
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd stressmaster
+# Install from npm
+npm install -g stressmaster
 
-# Install globally
-./install.sh
-
-# Or manually:
-npm run build
-npm install -g .
+# Verify installation
+stressmaster --version
 ```
 
-#### Option B: Docker Installation
+#### Option B: Development Installation (from source)
 
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd stressmaster
 
-# Copy environment configuration
-cp .env.example .env
+# Install dependencies
+npm install
 
-# Deploy the application
-./scripts/deploy.sh
+# Build the project
+npm run build
+
+# Install globally
+npm install -g .
 ```
 
 ### 2. First Load Test
 
-#### Using Global Installation:
+After installation, you can immediately start using StressMaster:
 
 ```bash
 # Interactive mode
@@ -97,17 +95,10 @@ stressmaster "spike test with 50 requests in 30 seconds to https://api.example.c
 stressmaster export html
 ```
 
-#### Using Docker Installation:
-
-```bash
-# Access the interactive CLI
-docker-compose exec stressmaster npm start
-```
-
 Try your first load test:
 
-```
-Send 100 GET requests to https://httpbin.org/get over 30 seconds
+```bash
+stressmaster "Send 100 GET requests to https://httpbin.org/get over 30 seconds"
 ```
 
 ### 3. AI Provider Configuration

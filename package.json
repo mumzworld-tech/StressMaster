@@ -1,16 +1,24 @@
 {
   "name": "stressmaster",
-  "version": "1.0.2",
-  "description": "StressMaster - AI-powered load testing tool using natural language commands",
-  "main": "dist/cli.js",
+  "version": "1.0.3",
+  "description": "AI-powered load testing CLI tool using natural language commands. Convert plain English test descriptions into K6 load test scripts.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "stressmaster": "./dist/cli.js",
     "sm": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "config",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
-    "start": "node dist/index.js",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -18,18 +26,35 @@
     "test:watch": "vitest",
     "test:unit:watch": "vitest --config vitest.unit.config.ts",
     "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix",
-    "backend": "tsx server.ts"
+    "lint:fix": "eslint src/**/*.ts --fix"
   },
   "keywords": [
     "load-testing",
-    "ai",
+    "stress-testing",
+    "performance-testing",
+    "api-testing",
     "k6",
-    "performance",
-    "api-testing"
+    "ai",
+    "cli",
+    "natural-language",
+    "testing",
+    "load-tester",
+    "qa",
+    "automation"
   ],
-  "author": "",
+  "author": "StressMaster Contributors",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/stressmaster.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/stressmaster/issues"
+  },
+  "homepage": "https://github.com/yourusername/stressmaster#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@types/dockerode": "^3.3.42",
     "@types/js-yaml": "^4.0.9",
@@ -37,10 +62,8 @@
     "chalk": "^4.1.2",
     "cli-table3": "^0.6.3",
     "commander": "^11.1.0",
-    "cors": "^2.8.5",
     "dockerode": "^4.0.7",
     "dotenv": "^17.2.1",
-    "express": "^5.1.0",
     "inquirer": "^9.2.0",
     "joi": "^17.11.0",
     "js-yaml": "^4.1.0",
@@ -49,8 +72,6 @@
     "ws": "^8.14.0"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
     "@types/inquirer": "^9.0.0",
     "@types/node": "^20.8.0",
     "@types/uuid": "^9.0.0",

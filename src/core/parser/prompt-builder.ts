@@ -46,118 +46,112 @@ export interface InputFormat {
 }
 
 export class PromptBuilder {
-  private static readonly SYSTEM_PROMPT = `You are StressMaster's AI assistant that converts natural language descriptions into structured load test specifications. 
+  private static readonly SYSTEM_PROMPT = `You are StressMaster's AI assistant that converts natural language commands into structured load test specifications.
 
-Your task is to parse user commands and extract:
-- HTTP method (GET, POST, PUT, DELETE, etc.)
-- Target URL
-- Request payload (if any)
-- Media files for upload (if any)
-- Load pattern (constant, ramp-up, spike, step)
-- Test duration and virtual users
-- Test type (baseline, spike, stress, endurance, volume, batch)
+CRITICAL REQUIREMENTS:
+1. You MUST respond with ONLY valid JSON matching the exact LoadTestSpec schema below
+2. Generate deterministic, consistent output for similar inputs
+3. Use literal values from the command when provided
+4. Generate IDs as deterministic strings based on command content (e.g., "test-001", "workflow-auth")
+5. Do NOT use Date.now(), random() functions, or timestamps in IDs or output
+6. Extract exact URLs and HTTP methods from the command - do not substitute placeholder URLs
 
-WORKFLOW SUPPORT:
-- Understand natural language patterns for sequences (first, then, next, finally, start by, etc.)
-- Recognize parallel execution (and, also, at the same time, simultaneously, etc.)
-- Handle data dependencies between steps (with data from step X, using response from previous step, etc.)
-- Support mixed sequential and parallel workflows
-- Accept ANY format: bullet points (•), commas, semicolons, newlines, or plain text
-- Be flexible with input structure - adapt to user's natural way of writing
-
-BATCH TESTING SUPPORT:
-- Recognize batch commands: "batch test:", "test multiple APIs:", "parallel test:", "sequential test:"
-- Support multiple API endpoints in single command: "GET api1.com, POST api2.com, PUT api3.com"
-- Handle different load patterns per API: "100 requests to api1.com, 50 requests to api2.com"
-- Support mixed execution modes: "parallel batch:", "sequential batch:", "run in parallel:", "run sequentially:"
-- Support dynamic payloads: "increment user.id by 1", "random values for data.field"
-- Support execution options: "max 3 concurrent", "delay 5s between tests", "retry failed tests"
-- Support K6 configuration: "generate separate K6 scripts", "custom K6 options"
-- Support comprehensive reporting: "individual reports", "combined report", "include raw data"
-- Aggregate results from multiple APIs into unified report
-- Support batch with media: "POST api1.com with file: @data.json, GET api2.com/status"
-- Support assertions: "expect success rate > 95%", "max response time < 500ms"
-
-MEDIA SUPPORT:
-- Recognize file upload patterns: "file: @image.jpg", "avatar: @photo.png"
-- Support multiple files: "files: @doc1.pdf, @doc2.docx"
-- Handle mixed data and files: "avatar: @photo.png and data: {"name": "John"}"
-- Support various file types: images, documents, archives, audio, video
-- Use appropriate content types: multipart/form-data for multiple files, binary for single files
-
-PAYLOAD SOURCES (All Supported):
-1. OpenAPI Files: @api.yaml, @spec.yml, @openapi.json
-2. JSON Files: @payload.json, @data.json, @template.json
-3. Inline JSON: {"key": "value"}, [{"item": "data"}]
-4. Natural Language: "user data", "random items", "test payload"
-5. Media Files: @image.jpg, @document.pdf, @video.mp4
-6. Mixed Sources: Combine any of the above
-
-RULES:
-- Respond with ONLY valid JSON
-- Use exact URLs and methods from the command
-- For file references like "@filename.json", use that as the payload template
-- For media files like "file: @image.jpg", add to media.files array
-- For OpenAPI files, generate dynamic payloads based on the schema
-- For incrementing fields, add them to an incrementFields array
-- Keep load patterns simple - just set type and virtualUsers
-- Default to POST for requests with payloads or media, GET otherwise
-- Generate realistic test data (names, emails, IDs, etc.) instead of hardcoded values
-- For workflows, create a "workflow" array with steps
-- For batch tests, create a "batch" object with tests array
-- Be flexible with workflow structure - adapt to the user's intent
-
-SINGLE REQUEST OUTPUT:
+STRICT JSON SCHEMA (LoadTestSpec):
+{
+  "id": "string (required) - deterministic ID like 'test-001' or 'workflow-auth'",
+  "name": "string (required) - descriptive test name",
+  "description": "string (required) - copy of original command or description",
+  "testType": "baseline" | "spike" | "stress" | "endurance" | "volume" | "workflow" | "batch" (required),
+  "requests": [
     {
-      "method": "POST",
-      "url": "http://api.example.com/endpoint",
-      "body": {"name": "John Doe", "email": "john@example.com", "age": 30},
+      "method": "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS" (required),
+      "url": "string (required) - exact URL from command",
+      "headers": {"key": "value"} (optional),
+      "body": {} (optional - use for inline JSON payloads),
+      "payload": {
+        "template": "string",
+        "variables": []
+      } (optional - use for templated payloads),
       "media": {
-        "files": [
-          {
-            "fieldName": "avatar",
-            "filePath": "photo.png"
-          }
-        ],
-        "formData": {"description": "User profile"}
-      },
-      "requestCount": 10,
-      "loadPattern": {"type": "constant", "virtualUsers": 5},
-      "duration": {"value": 60, "unit": "seconds"},
-      "incrementFields": ["requestId"]
+        "files": [{"fieldName": "string", "filePath": "string"}],
+        "contentType": "multipart/form-data"
+      } (optional)
     }
+  ] (required - at least one request, unless workflow/batch),
+  "workflow": [...] (optional - for multi-step workflows),
+  "batch": {...} (optional - for batch tests),
+  "loadPattern": {
+    "type": "constant" | "ramp-up" | "spike" | "step" | "random-burst" (required),
+    "virtualUsers": number (optional),
+    "requestsPerSecond": number (optional),
+    "rampUpTime": {"value": number, "unit": "seconds"|"minutes"|"hours"} (optional),
+    "stages": [...] (optional - for K6 stages)
+  } (required),
+  "duration": {
+    "value": number (required),
+    "unit": "seconds" | "minutes" | "hours" (required)
+  } (required)
+}
 
-WORKFLOW OUTPUT:
-    {
-      "workflow": [
-        {
-          "type": "sequential",
-          "steps": [
-            {
-              "method": "GET",
-              "url": "http://api.example.com/users",
-              "requestCount": 1
-            },
-            {
-              "method": "POST",
-              "url": "http://api.example.com/orders",
-              "body": {"userId": "{{step1.userId}}", "items": [{"name": "Product 1"}]},
-              "requestCount": 1
-            }
-          ]
-        }
-      ],
-      "loadPattern": {"type": "constant", "virtualUsers": 1},
-      "duration": {"value": 30, "unit": "seconds"}
-    }
+EXTRACTION RULES:
+1. HTTP Method: Extract from command ("GET", "POST", "send X GET", etc.) - default to GET if not specified
+2. URL: Extract exact URL from command - NEVER use placeholder URLs like "api.example.com" unless that's what the user specified
+3. Payload: 
+   - If inline JSON provided, use "body" field
+   - If file reference (@file.json), use "payload.template" with file reference
+   - If natural language description, generate realistic sample payload in "body"
+4. Test Type: Infer from keywords:
+   - "spike" → spike
+   - "stress" → stress  
+   - "endurance" | "sustained" → endurance
+   - "volume" | "bulk" → volume
+   - "batch" | "multiple" → batch
+   - "workflow" | "first...then" → workflow
+   - default → baseline
+5. Load Pattern:
+   - Extract virtual users count from command ("10 requests", "50 users", etc.)
+   - Extract duration from command ("for 30 seconds", "over 5 minutes", etc.)
+   - Infer pattern type: "ramp up" → ramp-up, "spike" → spike, "constant" → constant
+6. IDs: Generate deterministic IDs based on content:
+   - "test-{type}-{method}-{endpoint-hash}"
+   - "workflow-{first-step}-{last-step}"
+   - "batch-{count}-tests"
 
-IMPORTANT: Generate ACTUAL values, not faker templates. Use realistic data like "John Doe", "john@example.com", 30, etc. Do NOT use {{faker.name.fullName}} or similar templates.`;
+WORKFLOW RECOGNITION:
+- Keywords: "first", "then", "next", "after", "start by", "followed by"
+- Sequential: steps execute in order
+- Parallel: "at the same time", "simultaneously", "in parallel"
+- Create workflow array with type: "sequential" | "parallel"
 
-  private static readonly USER_PROMPT_TEMPLATE = `Parse this StressMaster command and convert it to a LoadTestSpec JSON:
+BATCH RECOGNITION:
+- Keywords: "batch", "multiple APIs", "test all", "parallel test", "sequential test"
+- Multiple endpoints in single command: "GET api1.com, POST api2.com"
+- Create batch object with tests array
+
+MEDIA RECOGNITION:
+- Patterns: "file: @image.jpg", "upload @photo.png", "@document.pdf"
+- Create media object with files array
+
+DETERMINISTIC OUTPUT REQUIREMENTS:
+- Same command → same output (except for IDs which should be deterministic based on content)
+- Use literal values from command when available
+- Generate realistic sample data when not specified (e.g., "John Doe", "john@example.com")
+- Do NOT introduce random variables unless explicitly requested
+- Do NOT use template variables like {{faker.*}} or {{random.*}}
+
+RESPONSE FORMAT:
+Respond with ONLY the JSON object, no markdown formatting, no code blocks, no explanations.`;
+
+  private static readonly USER_PROMPT_TEMPLATE = `Parse this StressMaster command and convert it to a LoadTestSpec JSON following the strict schema:
 
 Command: "{input}"
 
-Respond with only valid JSON, no additional text or explanation.`;
+IMPORTANT:
+- Extract exact URLs and methods from the command
+- Generate deterministic IDs (e.g., based on endpoint or test type)
+- Use literal values from command when provided
+- Do NOT use random values or Date.now() for IDs
+- Respond with ONLY valid JSON matching the LoadTestSpec schema, no markdown, no code blocks, no explanations`;
 
   private static readonly EXAMPLES: PromptExample[] = [
     // Workflow Examples
@@ -165,7 +159,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "first GET https://api.example.com/users, then POST https://api.example.com/orders",
       output: {
-        id: "workflow_" + Date.now(),
+        id: "example-workflow-001",
         name: "User Order Workflow",
         description: "Simple sequential workflow: get users, create order",
         testType: "workflow",
@@ -197,7 +191,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "• GET https://api.example.com/users\n• POST https://api.example.com/orders",
       output: {
-        id: "workflow_" + Date.now(),
+        id: "example-workflow-001",
         name: "Bullet Point Workflow",
         description: "Workflow with bullet point format",
         testType: "workflow",
@@ -229,7 +223,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "GET https://api.example.com/users; POST https://api.example.com/orders",
       output: {
-        id: "workflow_" + Date.now(),
+        id: "example-workflow-001",
         name: "Semicolon Workflow",
         description: "Workflow with semicolon separator",
         testType: "workflow",
@@ -261,7 +255,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "start by getting auth token, then fetch products and categories, then create order",
       output: {
-        id: "workflow_" + Date.now(),
+        id: "example-workflow-001",
         name: "Auth Product Order Workflow",
         description: "Sequential workflow with auth, products, and order",
         testType: "workflow",
@@ -298,7 +292,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         'first GET https://httpbin.org/get, then POST https://httpbin.org/post with {"test": "workflow"}',
       output: {
-        id: "workflow_" + Date.now(),
+        id: "example-workflow-001",
         name: "Simple Workflow Test",
         description: "Simple sequential workflow with GET then POST",
         testType: "workflow",
@@ -329,7 +323,7 @@ Respond with only valid JSON, no additional text or explanation.`;
     {
       input: "POST /upload with file: @image.jpg",
       output: {
-        id: "media_" + Date.now(),
+        id: "example-media-001",
         name: "Single File Upload",
         description: "Upload single image file",
         testType: "baseline",
@@ -357,7 +351,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         'POST /documents with files: @doc1.pdf, @doc2.docx and data: {"category": "legal"}',
       output: {
-        id: "media_" + Date.now(),
+        id: "example-media-001",
         name: "Multiple File Upload",
         description: "Upload multiple documents with metadata",
         testType: "baseline",
@@ -390,7 +384,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         'POST /profile with avatar: @photo.png and data: {"name": "John", "email": "john@example.com"}',
       output: {
-        id: "media_" + Date.now(),
+        id: "example-media-001",
         name: "Profile Upload",
         description: "Upload profile with avatar and user data",
         testType: "baseline",
@@ -420,7 +414,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         'send 3 POST requests to http://backbone.mumz.io/magento/qcomm-order with header x-api-key 2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9 and body {"requestId": "demo-testing—10", "payload": [{"externalId": "ord#1"}]} increment requestId',
       output: {
-        id: "test_" + Date.now(),
+        id: "example-test-001",
         name: "Magento Order Test",
         description:
           'send 3 POST requests to http://backbone.mumz.io/magento/qcomm-order with header x-api-key 2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9 and body {"requestId": "demo-testing—10", "payload": [{"externalId": "ord#1"}]} increment requestId',
@@ -463,7 +457,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         'send 2 POST requests to http://backbone.mumz.io/magento/qcomm-order with header x-api-key 2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9 and body {"requestId": "seller-req1", "payload": [{"externalId": "Seller#1", "order_id": "5783136", "increment_id": "1202500044"}]} increment order_id and increment_id',
       output: {
-        id: "test_" + Date.now(),
+        id: "example-test-001",
         name: "Magento Order Test",
         description:
           'send 2 POST requests to http://backbone.mumz.io/magento/qcomm-order with header x-api-key 2f8a6e4d-91b1-4f63-8f42-bb91a3cb56a9 and body {"requestId": "seller-req1", "payload": [{"externalId": "Seller#1", "order_id": "5783136", "increment_id": "1202500044"}]} increment order_id and increment_id',
@@ -513,7 +507,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "Send 100 POST requests to https://api.example.com/orders with random orderIds",
       output: {
-        id: "test_" + Date.now(),
+        id: "example-test-001",
         name: "POST Orders Test",
         description:
           "Send 100 POST requests to https://api.example.com/orders with random orderIds",
@@ -552,7 +546,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         'send 6 POST requests with spike pattern to https://httpbin.org/post with body {"test":"spike-data"}',
       output: {
-        id: "test_" + Date.now(),
+        id: "example-test-001",
         name: "Spike Test",
         description: "Spike pattern test with POST requests",
         testType: "spike",
@@ -581,7 +575,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "Stress test gradually increasing from 10 to 100 users over 5 minutes for POST /api/login",
       output: {
-        id: "test_" + Date.now(),
+        id: "example-test-001",
         name: "Stress Test Login API",
         description:
           "Stress test gradually increasing from 10 to 100 users over 5 minutes for POST /api/login",
@@ -630,7 +624,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         'send 3 POST requests to https://api.example.com/orders with header x-api-key abc123 {"requestId": "order-123", "payload": [{"externalId": "ORD#1"}]}',
       output: {
-        id: "test_" + Date.now(),
+        id: "example-test-001",
         name: "Load Test API",
         description:
           "Send 3 POST requests to API endpoint with specific JSON payload",
@@ -664,7 +658,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "Send X requests at random intervals to simulate unpredictable real-world traffic patterns",
       output: {
-        id: "test_" + Date.now(),
+        id: "example-test-001",
         name: "Random Burst Traffic Test",
         description:
           "Send X requests at random intervals to simulate unpredictable real-world traffic patterns",
@@ -700,7 +694,7 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "Push 1,000 requests, each carrying 100 items per payload to stress test bulk data handling",
       output: {
-        id: "test_" + Date.now(),
+        id: "example-test-001",
         name: "High-Volume Bulk Data Test",
         description:
           "Push 1,000 requests, each carrying 100 items per payload to stress test bulk data handling",
@@ -765,18 +759,18 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "batch test: GET https://api1.com/users, POST https://api2.com/orders, PUT https://api3.com/inventory",
       output: {
-        id: "batch_" + Date.now(),
+        id: "example-batch-001",
         name: "Multi-API Batch Test",
         description: "Batch test with multiple API endpoints",
         testType: "batch",
         requests: [], // Empty for batch tests
         batch: {
-          id: "batch_" + Date.now(),
+          id: "example-batch-001",
           name: "Multi-API Batch Test",
           description: "Batch test with multiple API endpoints",
           tests: [
             {
-              id: "test1_" + Date.now(),
+              id: "example-batch-test-001",
               name: "Users API Test",
               description: "GET request to users API",
               testType: "baseline",
@@ -791,7 +785,7 @@ Respond with only valid JSON, no additional text or explanation.`;
               duration: { value: 60, unit: "seconds" },
             },
             {
-              id: "test2_" + Date.now(),
+              id: "example-batch-test-002",
               name: "Orders API Test",
               description: "POST request to orders API",
               testType: "baseline",
@@ -807,7 +801,7 @@ Respond with only valid JSON, no additional text or explanation.`;
               duration: { value: 60, unit: "seconds" },
             },
             {
-              id: "test3_" + Date.now(),
+              id: "example-batch-test-003",
               name: "Inventory API Test",
               description: "PUT request to inventory API",
               testType: "baseline",
@@ -835,18 +829,18 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "batch: 100 requests to https://api1.com/users, 50 requests to https://api2.com/orders",
       output: {
-        id: "batch_" + Date.now(),
+        id: "example-batch-001",
         name: "Different Load Batch Test",
         description: "Batch test with different load patterns",
         testType: "batch",
         requests: [], // Empty for batch tests
         batch: {
-          id: "batch_" + Date.now(),
+          id: "example-batch-001",
           name: "Different Load Batch Test",
           description: "Batch test with different load patterns",
           tests: [
             {
-              id: "test1_" + Date.now(),
+              id: "example-batch-test-001",
               name: "Users API Test",
               description: "100 requests to users API",
               testType: "baseline",
@@ -861,7 +855,7 @@ Respond with only valid JSON, no additional text or explanation.`;
               duration: { value: 60, unit: "seconds" },
             },
             {
-              id: "test2_" + Date.now(),
+              id: "example-batch-test-002",
               name: "Orders API Test",
               description: "50 requests to orders API",
               testType: "baseline",
@@ -888,14 +882,14 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "sequential batch: 20 requests to https://api1.com/get, 15 requests to https://api2.com/post with dynamic payload increment user.id by 1, expect success rate > 95%",
       output: {
-        id: "batch_" + Date.now(),
+        id: "example-batch-001",
         name: "Sequential Batch with Dynamic Payloads",
         description:
           "Sequential batch test with dynamic payloads and assertions",
         testType: "batch",
         requests: [],
         batch: {
-          id: "batch_" + Date.now(),
+          id: "example-batch-001",
           name: "Sequential Batch with Dynamic Payloads",
           description:
             "Sequential batch test with dynamic payloads and assertions",
@@ -914,7 +908,7 @@ Respond with only valid JSON, no additional text or explanation.`;
           },
           tests: [
             {
-              id: "test1_" + Date.now(),
+              id: "example-batch-test-001",
               name: "GET API Test",
               description: "20 requests to GET API",
               testType: "baseline",
@@ -930,7 +924,7 @@ Respond with only valid JSON, no additional text or explanation.`;
               ],
             },
             {
-              id: "test2_" + Date.now(),
+              id: "example-batch-test-002",
               name: "POST API Test",
               description: "15 requests to POST API",
               testType: "baseline",
@@ -957,14 +951,14 @@ Respond with only valid JSON, no additional text or explanation.`;
       input:
         "parallel batch with K6 scripts: 100 requests to https://api1.com/get, 75 requests to https://api2.com/post, max 3 concurrent, generate individual reports",
       output: {
-        id: "batch_" + Date.now(),
+        id: "example-batch-001",
         name: "Parallel Batch with K6 and Reports",
         description:
           "Parallel batch test with K6 scripts and individual reports",
         testType: "batch",
         requests: [],
         batch: {
-          id: "batch_" + Date.now(),
+          id: "example-batch-001",
           name: "Parallel Batch with K6 and Reports",
           description:
             "Parallel batch test with K6 scripts and individual reports",
@@ -978,7 +972,7 @@ Respond with only valid JSON, no additional text or explanation.`;
           },
           tests: [
             {
-              id: "test1_" + Date.now(),
+              id: "example-batch-test-001",
               name: "GET API Test",
               description: "100 requests to GET API",
               testType: "baseline",
@@ -986,7 +980,7 @@ Respond with only valid JSON, no additional text or explanation.`;
               loadPattern: { type: "constant", virtualUsers: 100 },
             },
             {
-              id: "test2_" + Date.now(),
+              id: "example-batch-test-002",
               name: "POST API Test",
               description: "75 requests to POST API",
               testType: "baseline",

@@ -1,0 +1,91 @@
+# Source files
+src/
+tsconfig.json
+tsconfig.test.json
+vitest.config.ts
+vitest.integration.config.ts
+vitest.unit.config.ts
+
+# Development files
+*.test.ts
+*.spec.ts
+tests/
+test-media/
+
+# Development dependencies
+node_modules/
+.env
+.env.local
+.env.*.local
+
+# Build artifacts (we only need dist/)
+*.tsbuildinfo
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (keep README.md, exclude others)
+docs/
+*.md
+!README.md
+
+# Web UI (removed)
+stressmaster-web/
+server.ts
+
+# Cache and temporary files
+cache/
+*.cache
+tmp/
+temp/
+
+# Test results and outputs
+exports/
+k6-scripts/
+*.json.results.json
+
+# Batch testing artifacts
+batch-load-testing/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# Docker files (not needed for npm package)
+docker/
+Dockerfile
+docker-compose*.yml
+
+# Scripts (not needed for npm package)
+scripts/
+install.sh
+
+# Backup files
+backups/
+*.tar.gz
+*.zip
+
+# Example and sample files
+example-*.yaml
+example-*.json
+*-example.*
+*.example.*
+
+# Config examples (keep template, exclude actual configs with secrets)
+config/*.json
+!config/*.example.json
+
+# Web UI design docs (removed)
+WEB_UI_DESIGN.md
+
