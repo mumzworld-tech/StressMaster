@@ -97,27 +97,38 @@ describe("ResultDisplayManager", () => {
       displayManager.displayResults(mockTestResult);
 
       // Verify that console.log was called multiple times for different sections
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("✅ Test Completed Successfully!")
-      );
+      // Updated to match new display format with boxed design
+      const calls = mockConsoleLog.mock.calls.map((call) => call[0]);
+      const allOutput = calls.join("\n");
+
+      // Check for key elements in the new boxed format
+      expect(allOutput).toContain("🎯 Test Results");
+      expect(allOutput).toContain("✨ Test completed!");
+      expect(allOutput).toContain("📊 Test Summary");
     });
 
     it("should display error information when errors exist", () => {
       displayManager.displayResults(mockTestResult);
 
       // Should display error section since we have errors in mock data
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("⚠️  Error Summary:")
-      );
+      const calls = mockConsoleLog.mock.calls.map((call) => call[0]);
+      const allOutput = calls.join("\n");
+
+      // Check for error section in the new boxed format
+      expect(allOutput).toContain("⚠️  Error Summary");
+      expect(allOutput).toContain("HTTP_500");
     });
 
     it("should display recommendations when they exist", () => {
       displayManager.displayResults(mockTestResult);
 
-      // Should display recommendations section
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("💡 AI Recommendations:")
-      );
+      // Should display recommendations section (updated to match new boxed format)
+      const calls = mockConsoleLog.mock.calls.map((call) => call[0]);
+      const allOutput = calls.join("\n");
+
+      // Check for recommendations section in the new boxed format
+      expect(allOutput).toContain("💡 AI Recommendations");
+      expect(allOutput).toContain("Consider increasing server capacity");
     });
 
     it("should handle results with no errors gracefully", () => {
