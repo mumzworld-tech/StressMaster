@@ -1,10 +1,31 @@
 import { BatchTestItem, BatchTestSpec } from "../../../types/load-test-spec";
 
 export class K6ScriptGenerator {
+  /**
+   * Get error rate threshold based on test type
+   */
+  private getErrorThreshold(testType: string): number {
+    switch (testType) {
+      case "spike":
+        return 0.5; // 50% - spike tests intentionally overwhelm servers
+      case "stress":
+        return 0.4; // 40% - stress tests push limits
+      case "endurance":
+        return 0.2; // 20% - endurance tests should be stable
+      case "volume":
+        return 0.3; // 30% - volume tests may have some errors under high load
+      case "baseline":
+      default:
+        return 0.1; // 10% - baseline tests should be stable
+    }
+  }
+
   async generateScript(
     test: BatchTestItem,
     batchSpec: BatchTestSpec
   ): Promise<string> {
+    const errorThreshold = this.getErrorThreshold(test.testType);
+
     // This would integrate with the existing K6 executor's script generation
     // For now, return a basic template
     return `
@@ -20,7 +41,7 @@ export const options = {
   ],
   thresholds: {
     http_req_duration: ['p(95)<5000'],
-    errors: ['rate<0.1'],
+    errors: ['rate<${errorThreshold}'],
   },
 };
 

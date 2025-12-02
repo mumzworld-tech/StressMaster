@@ -203,14 +203,53 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
           responseBody: response.data,
         });
 
-        // Clean status line
+        // Clean status line with progress for large request counts
         const statusEmoji = success ? "✅" : "❌";
         const statusColor = success ? chalk.green : chalk.red;
-        console.log(
-          `Request ${i + 1}/${requestCount}: ${statusColor(
-            `${response.status} (${responseTime}ms)`
-          )} ${statusEmoji}`
-        );
+
+        // Show detailed info for small tests, summary for large tests
+        if (requestCount <= 10) {
+          console.log(
+            `Request ${i + 1}/${requestCount}: ${statusColor(
+              `${response.status} (${responseTime}ms)`
+            )} ${statusEmoji}`
+          );
+        } else {
+          // Show progress updates periodically for large tests
+          const shouldShowProgress =
+            (i + 1) % Math.max(10, Math.floor(requestCount / 20)) === 0 ||
+            i === 0 ||
+            i === requestCount - 1;
+
+          if (shouldShowProgress) {
+            const percentComplete = Math.round(((i + 1) / requestCount) * 100);
+            const elapsed = Date.now() - startTime.getTime();
+            const estimatedTotal =
+              requestCount > 1 ? (elapsed / (i + 1)) * requestCount : elapsed;
+            const remaining = Math.max(0, estimatedTotal - elapsed);
+            // Clear any previous inline progress before showing full progress
+            process.stdout.write("\r" + " ".repeat(120) + "\r");
+            console.log(
+              `📊 Progress: ${percentComplete}% (${
+                i + 1
+              }/${requestCount}) | ${statusColor(
+                `${response.status} (${responseTime}ms)`
+              )} ${statusEmoji} | Elapsed: ${Math.round(
+                elapsed / 1000
+              )}s | Remaining: ~${Math.round(remaining / 1000)}s`
+            );
+          } else {
+            // Just update the status line without newline (for inline updates)
+            const percentComplete = Math.round(((i + 1) / requestCount) * 100);
+            process.stdout.write(
+              `\r📊 ${
+                i + 1
+              }/${requestCount} (${percentComplete}%) | Last: ${statusColor(
+                `${response.status} (${responseTime}ms)`
+              )} ${statusEmoji}`
+            );
+          }
+        }
 
         // Add delay between requests (except for the last one)
         if (i < requestCount - 1 && delayBetweenRequests > 0) {
@@ -354,45 +393,64 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
 
       // Handle file references (e.g., @filename.json)
       if (typeof body === "string" && body.startsWith("@")) {
-        const filePath = body.substring(1); // Remove @ prefix
-        const fs = require("fs");
-        const path = require("path");
+        // Use centralized file resolver (resolves from root directory)
+        const { FileResolver } = require("../../utils/file-resolver");
 
         try {
-          const fullPath = path.resolve(process.cwd(), filePath);
-          body = fs.readFileSync(fullPath, "utf8");
+          body = FileResolver.resolveFileSync(body);
 
-          // If we have variables and this is a file reference, automatically handle requestId incrementing
+          // If we have variables and this is a file reference, extract base values from the file
           if (payload.variables && payload.variables.length > 0) {
-            const requestIdVar = payload.variables.find(
-              (v: any) => v.name === "requestId"
-            );
-            if (requestIdVar) {
-              // Extract the actual requestId value from the loaded JSON
-              try {
-                const jsonData = JSON.parse(body);
-                if (jsonData.requestId) {
-                  // Update the baseValue to match the actual value in the file
-                  requestIdVar.parameters = requestIdVar.parameters || {};
-                  requestIdVar.parameters.baseValue = jsonData.requestId;
+            try {
+              const jsonData = JSON.parse(body);
+
+              // Helper to find nested field value (case-insensitive)
+              const findNestedValue = (obj: any, fieldName: string): any => {
+                if (obj === null || obj === undefined) return undefined;
+                if (typeof obj !== "object") return undefined;
+
+                // Check direct property (case-insensitive)
+                for (const key in obj) {
+                  if (key.toLowerCase() === fieldName.toLowerCase()) {
+                    return obj[key];
+                  }
                 }
-              } catch (parseError) {
-                console.warn(
-                  "⚠️ Could not parse JSON to extract requestId:",
-                  parseError
-                );
-              }
+
+                // Check nested objects
+                for (const key in obj) {
+                  if (obj.hasOwnProperty(key)) {
+                    const nested = findNestedValue(obj[key], fieldName);
+                    if (nested !== undefined) {
+                      return nested;
+                    }
+                  }
+                }
+
+                return undefined;
+              };
+
+              // Update base values for all increment variables
+              payload.variables.forEach((variable: any) => {
+                const baseValue = findNestedValue(jsonData, variable.name);
+                if (baseValue !== undefined) {
+                  variable.parameters = variable.parameters || {};
+                  variable.parameters.baseValue = String(baseValue);
+                }
+              });
+            } catch (parseError) {
+              console.warn(
+                "⚠️ Could not parse JSON to extract base values:",
+                parseError
+              );
             }
           }
         } catch (fileError) {
-          console.warn(
-            `⚠️ Failed to load file ${filePath}:`,
-            (fileError as Error).message
-          );
-          console.warn(`Current working directory: ${process.cwd()}`);
-          console.warn(
-            `Attempted full path: ${path.resolve(process.cwd(), filePath)}`
-          );
+          // FileResolver throws StressMasterError with helpful suggestions
+          if (fileError instanceof Error) {
+            console.warn(`⚠️ ${fileError.message}`);
+          } else {
+            console.warn(`⚠️ Failed to load file: ${body}`);
+          }
           return body; // Return the original template string instead of empty object
         }
       }
@@ -431,6 +489,11 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
         }
         const deduplicatedVariables = Array.from(variableMap.values());
         deduplicatedVariables.forEach((variable: any) => {
+          // Ensure type is set correctly for incremental variables
+          if (!variable.type && variable.parameters?.baseValue) {
+            variable.type = "incremental";
+          }
+
           const value = this.generateVariableValue(
             variable.type,
             variable.parameters,
@@ -545,11 +608,11 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
       // Check for baseValue (standard format)
       if (parameters?.baseValue) {
         const baseValue = parameters.baseValue.toString();
-        // Extract base and number parts (e.g., "ai-body-req10" -> "ai-body-req" + "10")
-        const match = baseValue.match(/^(.+?)(\d+)$/);
+        // Extract number from the END of the string (e.g., "external-test-1" -> "external-test-" + "1")
+        const match = baseValue.match(/(\d+)$/);
         if (match) {
-          const prefix = match[1];
-          const startNum = parseInt(match[2]);
+          const prefix = baseValue.substring(0, match.index);
+          const startNum = parseInt(match[1], 10);
           const result = `${prefix}${startNum + requestIndex}`;
           return result;
         }
@@ -561,12 +624,11 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
       // Check for startValue (AI format)
       if (parameters?.startValue) {
         const startValue = parameters.startValue.toString();
-
-        // Extract base and number parts (e.g., "ai-claude-req2" -> "ai-claude-req" + "2")
-        const match = startValue.match(/^(.+?)(\d+)$/);
+        // Extract number from the END of the string
+        const match = startValue.match(/(\d+)$/);
         if (match) {
-          const prefix = match[1];
-          const startNum = parseInt(match[2]);
+          const prefix = startValue.substring(0, match.index);
+          const startNum = parseInt(match[1], 10);
           const result = `${prefix}${startNum + requestIndex}`;
           return result;
         }
@@ -595,11 +657,11 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
         // If user provided a base requestId, increment it
         if (parameters?.baseValue && requestIndex !== undefined) {
           const baseId = parameters.baseValue.toString();
-          // Extract base and number parts (e.g., "ord-1" -> "ord-" + "1", "ai-req101" -> "ai-req" + "101")
-          const match = baseId.match(/^(.+?)(\d+)$/);
+          // Extract base and number parts from the END (e.g., "external-test-1" -> "external-test-" + "1")
+          const match = baseId.match(/(\d+)$/);
           if (match) {
-            const prefix = match[1];
-            const startNum = parseInt(match[2]);
+            const prefix = baseId.substring(0, match.index);
+            const startNum = parseInt(match[1], 10);
             return `${prefix}${startNum + requestIndex}`;
           }
           // If no number found, append the index
@@ -608,22 +670,34 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
         // Also check for literalValue (for backward compatibility)
         if (parameters?.literalValue && requestIndex !== undefined) {
           const baseId = parameters.literalValue.toString();
-          // Extract base and number parts (e.g., "ord-1" -> "ord-" + "1", "ai-req4" -> "ai-req" + "4")
-          const match = baseId.match(/^(.+?)(\d+)$/);
+          // Extract base and number parts from the END
+          const match = baseId.match(/(\d+)$/);
           if (match) {
-            const prefix = match[1];
-            const startNum = parseInt(match[2]);
+            const prefix = baseId.substring(0, match.index);
+            const startNum = parseInt(match[1], 10);
             return `${prefix}${startNum + requestIndex}`;
           }
           // If no number found, append the index
           return `${baseId}-${requestIndex + 1}`;
         }
-        return parameters?.defaultRequestId || "ai-req1";
+        return parameters?.defaultRequestId || "sm-test-1";
       }
 
-      // Handle externalId specifically
+      // Handle externalId specifically with incremental support
       if (lowerName.includes("externalid")) {
-        return parameters?.defaultExternalId || "ORD#1";
+        if (parameters?.baseValue && requestIndex !== undefined) {
+          const baseId = parameters.baseValue.toString();
+          // Extract base and number parts from the END
+          const match = baseId.match(/(\d+)$/);
+          if (match) {
+            const prefix = baseId.substring(0, match.index);
+            const startNum = parseInt(match[1], 10);
+            return `${prefix}${startNum + requestIndex}`;
+          }
+          // If no number found, append the index
+          return `${baseId}-${requestIndex + 1}`;
+        }
+        return parameters?.defaultExternalId || "ext-1";
       }
 
       // Handle orderId

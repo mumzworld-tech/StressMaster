@@ -1,5 +1,15 @@
 import { LoadPattern, Duration, K6Stage } from "../../types";
 
+// Extended LoadPattern type for spike patterns
+interface SpikeLoadPattern extends LoadPattern {
+  baselineVUs?: number;
+  rampDownTime?: Duration;
+}
+
+interface RampUpLoadPattern extends LoadPattern {
+  rampDownTime?: Duration;
+}
+
 export class K6StageGenerator {
   generateK6Stages(pattern: LoadPattern): K6Stage[] {
     switch (pattern.type) {
@@ -18,7 +28,8 @@ export class K6StageGenerator {
 
   private generateSpikeStages(pattern: LoadPattern): K6Stage[] {
     const stages: K6Stage[] = [];
-    const baselineVUs = (pattern as any).baselineVUs || 1;
+    const spikePattern = pattern as SpikeLoadPattern;
+    const baselineVUs = spikePattern.baselineVUs || 1;
     const maxVUs = pattern.virtualUsers || 10;
 
     // Start with baseline
@@ -46,7 +57,7 @@ export class K6StageGenerator {
     // Rapid spike down
     stages.push({
       duration: this.formatDuration(
-        (pattern as any).rampDownTime || { value: 10, unit: "seconds" }
+        spikePattern.rampDownTime || { value: 10, unit: "seconds" }
       ),
       target: baselineVUs,
     });
@@ -81,7 +92,8 @@ export class K6StageGenerator {
     }
 
     // Ramp down
-    const rampDownTime = (pattern as any).rampDownTime || {
+    const rampUpPattern = pattern as RampUpLoadPattern;
+    const rampDownTime = rampUpPattern.rampDownTime || {
       value: 60,
       unit: "seconds",
     };
@@ -114,7 +126,8 @@ export class K6StageGenerator {
     });
 
     // Ramp down
-    const rampDownTime = (pattern as any).rampDownTime || {
+    const constantPattern = pattern as RampUpLoadPattern;
+    const rampDownTime = constantPattern.rampDownTime || {
       value: 30,
       unit: "seconds",
     };

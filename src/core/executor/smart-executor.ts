@@ -4,6 +4,12 @@ import { K6LoadExecutor } from "./k6-executor";
 import { WorkflowExecutor } from "./workflow-executor";
 import { BatchExecutor } from "./batch-executor";
 import { EnhancedBatchExecutor } from "./batch";
+import {
+  ExecutorSelectionService,
+  ExecutorSelectionResult,
+} from "../../services/executor-selection.service";
+import chalk from "chalk";
+import { createLogger } from "../../utils/logger";
 
 export interface SmartExecutor {
   executeLoadTest(spec: LoadTestSpec): Promise<TestResult>;
@@ -15,6 +21,7 @@ export class SmartLoadExecutor implements SmartExecutor {
   private workflowExecutor: WorkflowExecutor;
   private batchExecutor: BatchExecutor;
   private enhancedBatchExecutor: EnhancedBatchExecutor;
+  private logger = createLogger({ component: "SmartLoadExecutor" });
 
   constructor() {
     this.simpleExecutor = new BasicHttpExecutor();
@@ -25,9 +32,16 @@ export class SmartLoadExecutor implements SmartExecutor {
   }
 
   async executeLoadTest(spec: LoadTestSpec): Promise<TestResult> {
-    const executorType = this.selectExecutor(spec);
+    const selection = ExecutorSelectionService.selectExecutor(spec);
+    const executorType = selection.executorType;
 
-    console.log(`🤖 Using ${executorType} executor for this test`);
+    this.logger.info("Executor selected", {
+      executorType,
+      reason: selection.reason,
+      confidence: selection.confidence,
+      metrics: selection.metrics,
+      specId: spec.id,
+    });
 
     if (executorType === "batch") {
       return await this.executeBatchTest(spec);
@@ -39,10 +53,18 @@ export class SmartLoadExecutor implements SmartExecutor {
       try {
         return await this.k6Executor.executeLoadTest(spec);
       } catch (error) {
-        console.log(
-          `⚠️  K6 executor failed, falling back to simple executor: ${error}`
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        console.log(chalk.yellow(`\n⚠️  K6 executor failed: ${errorMessage}`));
+        console.log(chalk.gray("   Falling back to simple HTTP executor...\n"));
+
+        this.logger.warn(
+          "K6 executor failed, falling back to simple executor",
+          {
+            error: errorMessage,
+            specId: spec.id,
+          }
         );
-        console.log(`⚡ Using simple executor as fallback`);
         return await this.simpleExecutor.executeLoadTest(spec);
       }
     }
@@ -53,10 +75,12 @@ export class SmartLoadExecutor implements SmartExecutor {
       throw new Error("Batch specification is required for batch tests");
     }
 
-    console.log(`🚀 Executing batch test: ${spec.batch.name}`);
-    console.log(
-      `📊 Batch mode: ${spec.batch.executionMode}, Tests: ${spec.batch.tests.length}`
-    );
+    this.logger.info("Executing batch test", {
+      batchName: spec.batch.name,
+      executionMode: spec.batch.executionMode,
+      testCount: spec.batch.tests.length,
+      specId: spec.id,
+    });
 
     const batchResult = await this.enhancedBatchExecutor.executeBatch(
       spec.batch
@@ -129,95 +153,14 @@ export class SmartLoadExecutor implements SmartExecutor {
     return recommendations;
   }
 
+  /**
+   * @deprecated Use ExecutorSelectionService.selectExecutor() instead
+   * This method is kept for backward compatibility but delegates to the service
+   */
   private selectExecutor(
     spec: LoadTestSpec
   ): "simple" | "k6" | "workflow" | "batch" {
-    // Check if this is a batch test
-    if (spec.testType === "batch" || spec.batch) {
-      console.log(
-        `📦 Batch executor selected: ${spec.batch?.tests.length || 0} tests, ${
-          spec.batch?.executionMode || "parallel"
-        } mode`
-      );
-      return "batch";
-    }
-
-    const requestCount = spec.loadPattern.virtualUsers || 1;
-    const loadPatternType = spec.loadPattern.type;
-    const testType = spec.testType;
-
-    // Check if this is a workflow test
-    const isWorkflowTest =
-      testType === "workflow" || (spec.workflow && spec.workflow.length > 0);
-
-    // For workflow tests, check if they have complex load patterns that warrant K6
-    if (isWorkflowTest) {
-      // Calculate total requests from workflow steps
-      let totalWorkflowRequests = 0;
-      if (spec.workflow && spec.workflow.length > 0) {
-        for (const workflowStep of spec.workflow) {
-          if (workflowStep.steps && Array.isArray(workflowStep.steps)) {
-            for (const step of workflowStep.steps) {
-              if (
-                "requestCount" in step &&
-                typeof step.requestCount === "number"
-              ) {
-                totalWorkflowRequests += step.requestCount;
-              }
-            }
-          }
-        }
-      }
-
-      // K6 DISABLED for workflows - always use workflow executor
-      // Original K6 selection logic (commented out):
-      // const hasComplexLoadPattern =
-      //   requestCount > 50 ||
-      //   totalWorkflowRequests > 50 ||
-      //   ["spike", "ramp-up", "random-burst"].includes(loadPatternType) ||
-      //   testType === "stress" ||
-      //   testType === "endurance" ||
-      //   testType === "volume";
-
-      // if (hasComplexLoadPattern) {
-      //   console.log(
-      //     `📊 K6 selected for workflow: ${requestCount} global requests, ${totalWorkflowRequests} total workflow requests, ${loadPatternType} pattern, ${testType} test`
-      //   );
-      //   return "k6";
-      // } else {
-      console.log(
-        `🔄 Workflow executor selected (K6 disabled): ${testType} test with ${
-          spec.workflow?.length || 0
-        } workflow steps, ${totalWorkflowRequests} total requests`
-      );
-      return "workflow";
-      // }
-    }
-
-    // K6 DISABLED - Use simple executor for all tests to avoid virtual user limits
-    // Original K6 selection logic (commented out):
-    // 1. Large request counts (>50)
-    // 2. Complex load patterns (spike, ramp-up, random-burst)
-    // 3. High-volume tests
-    // 4. Stress/endurance tests
-
-    // const shouldUseK6 =
-    //   requestCount > 50 ||
-    //   ["spike", "ramp-up", "random-burst"].includes(loadPatternType) ||
-    //   testType === "stress" ||
-    //   testType === "endurance" ||
-    //   testType === "volume";
-
-    // if (shouldUseK6) {
-    //   console.log(
-    //     `📊 K6 selected: ${requestCount} requests, ${loadPatternType} pattern, ${testType} test`
-    //   );
-    //   return "k6";
-    // } else {
-    console.log(
-      `⚡ Simple executor selected (K6 disabled): ${requestCount} requests, ${loadPatternType} pattern, ${testType} test`
-    );
-    return "simple";
-    // }
+    const selection = ExecutorSelectionService.selectExecutor(spec);
+    return selection.executorType;
   }
 }

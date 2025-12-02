@@ -2,36 +2,35 @@ import { PromptTemplate } from "./types";
 
 export const COMMAND_PARSER_PROMPT: PromptTemplate = {
   name: "command-parser",
-  version: "1.0.0",
-  description: "AI prompt for parsing natural language load testing commands",
-  template: `You are a parser. Convert the natural language command into a JSON object.
+  version: "2.0.0",
+  description: "AI prompt for parsing natural language load testing commands - uses LoadTestSpec schema",
+  template: `You are StressMaster's AI assistant. Convert natural language commands into LoadTestSpec JSON.
 
-Schema:
+CRITICAL: Respond with ONLY valid JSON, no markdown, no code blocks.
+
+REQUIRED SCHEMA (LoadTestSpec):
 {
-  "method": "GET|POST|PUT|DELETE|PATCH",
-  "url": "extract-actual-url-from-command",
-  "headers": {},
-  "queryParams": {},
-  "body": null OR {...},
-  "requestCount": number (optional),
-  "loadPattern": { "type": "constant|ramp", "virtualUsers": number } (optional),
-  "duration": { "value": number, "unit": "seconds|minutes" } (optional)
+  "id": "string (deterministic: test-{type}-{method}-{hash})",
+  "name": "string (descriptive)",
+  "description": "string (original command)",
+  "testType": "baseline" | "spike" | "stress" | "endurance" | "volume" | "workflow" | "batch",
+  "requests": [{
+    "method": "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
+    "url": "string (exact URL from command)",
+    "headers": {} (optional),
+    "body": {} (optional - for inline JSON)
+  }],
+  "loadPattern": {
+    "type": "constant" | "ramp-up" | "spike" | "step" | "random-burst",
+    "virtualUsers": number
+  },
+  "duration": {"value": number, "unit": "seconds" | "minutes" | "hours"}
 }
 
-EXAMPLE INPUT:
-Send 2 POST requests to https://api.example.com/users with body { "id": 123 }
-
-EXAMPLE OUTPUT:
-{
-  "method": "POST",
-  "url": "https://api.example.com/users",
-  "headers": {},
-  "queryParams": {},
-  "body": { "id": 123 },
-  "requestCount": 2
-}
-
-IMPORTANT: Extract the actual URL from the command, do not use placeholder URLs.
+RULES:
+1. Extract exact URLs and methods from command
+2. Generate deterministic IDs: "test-{type}-{method}-{hash}"
+3. Infer missing values: default to GET, baseline, 1 user, 60 seconds
 
 Command: "{{input}}"
 
@@ -41,39 +40,34 @@ Return ONLY valid JSON.`,
 
 export const COMPLEX_JSON_PROMPT: PromptTemplate = {
   name: "complex-json-parser",
-  version: "1.0.0",
+  version: "2.0.0",
   description:
-    "AI prompt for parsing commands with complex nested JSON structures",
-  template: `You are a parser specialized in handling complex JSON structures. Convert the natural language command into a JSON object.
+    "AI prompt for parsing commands with complex nested JSON structures - uses LoadTestSpec schema",
+  template: `You are StressMaster's AI assistant. Convert natural language commands with complex JSON into LoadTestSpec JSON.
 
 CRITICAL RULES FOR COMPLEX JSON:
 1. Extract JSON body EXACTLY as provided - preserve all nesting, arrays, and structure
 2. Handle deeply nested objects and arrays correctly
 3. Preserve all field names and values exactly as written
 4. Support incrementing fields when mentioned (e.g., "increment order_id")
-5. Extract request count from patterns like "send X requests"
 
-Schema:
+REQUIRED SCHEMA (LoadTestSpec):
 {
-  "method": "GET|POST|PUT|DELETE|PATCH",
-  "url": "exact-url-from-command",
-  "headers": {"x-api-key": "key-if-provided"},
-  "body": {"exact": "json-structure"},
-  "requestCount": number,
-  "incrementFields": ["field1", "field2"] (if mentioned)
-}
-
-EXAMPLE INPUT:
-Send 2 POST requests to https://api.com with body {"data": [{"id": "123", "items": [{"sku": "ABC"}]}]} increment id
-
-EXAMPLE OUTPUT:
-{
-  "method": "POST",
-  "url": "https://api.com",
-  "headers": {},
-  "body": {"data": [{"id": "123", "items": [{"sku": "ABC"}]}]},
-  "requestCount": 2,
-  "incrementFields": ["id"]
+  "id": "string (deterministic)",
+  "name": "string (descriptive)",
+  "description": "string (original command)",
+  "testType": "baseline" | "spike" | "stress" | "endurance" | "volume" | "workflow" | "batch",
+  "requests": [{
+    "method": "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
+    "url": "string (exact URL from command)",
+    "headers": {},
+    "body": {"exact": "json-structure-with-all-nesting"}
+  }],
+  "loadPattern": {
+    "type": "constant" | "ramp-up" | "spike" | "step" | "random-burst",
+    "virtualUsers": number
+  },
+  "duration": {"value": number, "unit": "seconds" | "minutes" | "hours"}
 }
 
 Command: "{{input}}"
@@ -84,36 +78,35 @@ Return ONLY valid JSON.`,
 
 export const WORKING_COMMAND_PROMPT: PromptTemplate = {
   name: "working-command-parser",
-  version: "1.0.0",
-  description: "Simple AI prompt for parsing basic load testing commands",
-  template: `You are a parser. Convert the natural language command into a JSON object.
+  version: "2.0.0",
+  description: "AI prompt for parsing basic load testing commands - uses LoadTestSpec schema",
+  template: `You are StressMaster's AI assistant. Convert natural language commands into LoadTestSpec JSON.
 
-Schema:
+CRITICAL: Respond with ONLY valid JSON, no markdown, no code blocks.
+
+REQUIRED SCHEMA (LoadTestSpec):
 {
-  "method": "GET|POST|PUT|DELETE|PATCH",
-  "url": "extract-actual-url-from-command",
-  "headers": {},
-  "queryParams": {},
-  "body": null OR {...},
-  "requestCount": number (optional),
-  "loadPattern": { "type": "constant|ramp", "virtualUsers": number } (optional),
-  "duration": { "value": number, "unit": "seconds|minutes" } (optional)
+  "id": "string (deterministic: test-{type}-{method}-{hash})",
+  "name": "string (descriptive)",
+  "description": "string (original command)",
+  "testType": "baseline" | "spike" | "stress" | "endurance" | "volume" | "workflow" | "batch",
+  "requests": [{
+    "method": "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
+    "url": "string (exact URL from command - never use placeholders)",
+    "headers": {},
+    "body": {} (optional - for inline JSON)
+  }],
+  "loadPattern": {
+    "type": "constant" | "ramp-up" | "spike" | "step" | "random-burst",
+    "virtualUsers": number
+  },
+  "duration": {"value": number, "unit": "seconds" | "minutes" | "hours"}
 }
 
-IMPORTANT: Extract the actual URL from the command, do not use placeholder URLs.
-
-EXAMPLE INPUT:
-Send 2 POST requests to https://example.com/api with body { "id": 123 }
-
-EXAMPLE OUTPUT:
-{
-  "method": "POST",
-  "url": "https://example.com/api",
-  "headers": {},
-  "queryParams": {},
-  "body": { "id": 123 },
-  "requestCount": 2
-}
+RULES:
+1. Extract exact URLs and methods from command
+2. Generate deterministic IDs
+3. Infer missing values: default to GET, baseline, 1 user, 60 seconds
 
 Command: "{{input}}"
 
