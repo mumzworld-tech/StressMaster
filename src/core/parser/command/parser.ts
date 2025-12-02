@@ -81,13 +81,26 @@ export class UnifiedCommandParser implements CommandParser {
         );
       }
 
-      // Prioritize config file over constructor config
+      // Prioritize: environment variables -> config file -> constructor config -> defaults
       const aiConfig: AIConfig = {
         provider:
-          aiConfigFromFile.provider || this.config.aiProvider || "ollama",
-        model: aiConfigFromFile.model || this.config.modelName || "llama3.2:1b",
-        apiKey: aiConfigFromFile.apiKey || this.config.apiKey,
+          process.env.AI_PROVIDER ||
+          aiConfigFromFile.provider ||
+          this.config.aiProvider ||
+          "ollama",
+        model:
+          process.env.AI_MODEL ||
+          aiConfigFromFile.model ||
+          this.config.modelName ||
+          "llama3.2:1b",
+        apiKey:
+          process.env.AI_API_KEY ||
+          process.env.ANTHROPIC_API_KEY ||
+          process.env.OPENAI_API_KEY ||
+          aiConfigFromFile.apiKey ||
+          this.config.apiKey,
         endpoint:
+          process.env.AI_ENDPOINT ||
           aiConfigFromFile.endpoint ||
           this.config.ollamaEndpoint ||
           "http://localhost:11434",
@@ -257,11 +270,11 @@ export class UnifiedCommandParser implements CommandParser {
       // Unified approach for all providers - no special Claude handling
       const prompt = this.buildSimplePrompt(enhancedInput);
 
-      // Get AI response with more flexible temperature
+      // Get AI response with deterministic temperature for consistent output
       response = await this.aiProvider.generateCompletion({
         prompt,
         format: "json",
-        temperature: 0.3, // Increased from 0.01 for more flexibility
+        temperature: 0.0, // Deterministic output (0.01 minimum for some models)
         maxTokens: 2000, // Reduced from 4000 for faster responses
       });
 
@@ -392,16 +405,99 @@ export class UnifiedCommandParser implements CommandParser {
                 delete request.body;
               }
 
-              // Add variables for incrementing fields
-              incrementFields.forEach((field) => {
-                request.payload!.variables.push({
-                  name: field,
-                  type: "incremental",
-                  parameters: {
-                    baseValue: "1",
-                  },
+              // Add variables for incrementing fields - extract base values from file
+              if (request.payload.template.startsWith("@")) {
+                const { FileResolver } = await import(
+                  "../../../utils/file-resolver"
+                );
+                const fs = await import("fs");
+
+                try {
+                  const filePath = request.payload.template.substring(1);
+                  const resolved = FileResolver.resolveFile(filePath);
+
+                  if (resolved.exists && resolved.resolvedPath) {
+                    const fileContent = fs.readFileSync(
+                      resolved.resolvedPath,
+                      "utf8"
+                    );
+                    const jsonData = JSON.parse(fileContent);
+
+                    // Helper to find nested field value (case-insensitive)
+                    const findNestedValue = (
+                      obj: any,
+                      fieldName: string
+                    ): any => {
+                      if (obj === null || obj === undefined) return undefined;
+                      if (typeof obj !== "object") return undefined;
+
+                      // Check direct property (case-insensitive)
+                      for (const key in obj) {
+                        if (key.toLowerCase() === fieldName.toLowerCase()) {
+                          return obj[key];
+                        }
+                      }
+
+                      // Check nested objects
+                      for (const key in obj) {
+                        if (obj.hasOwnProperty(key)) {
+                          const nested = findNestedValue(obj[key], fieldName);
+                          if (nested !== undefined) {
+                            return nested;
+                          }
+                        }
+                      }
+
+                      return undefined;
+                    };
+
+                    incrementFields.forEach((field) => {
+                      const baseValue = findNestedValue(jsonData, field);
+                      request.payload!.variables.push({
+                        name: field,
+                        type: "incremental",
+                        parameters: {
+                          baseValue:
+                            baseValue !== undefined ? String(baseValue) : "1",
+                        },
+                      });
+                    });
+                  } else {
+                    // File not found, use defaults
+                    incrementFields.forEach((field) => {
+                      request.payload!.variables.push({
+                        name: field,
+                        type: "incremental",
+                        parameters: {
+                          baseValue: "1",
+                        },
+                      });
+                    });
+                  }
+                } catch (error) {
+                  // Error reading file, use defaults
+                  incrementFields.forEach((field) => {
+                    request.payload!.variables.push({
+                      name: field,
+                      type: "incremental",
+                      parameters: {
+                        baseValue: "1",
+                      },
+                    });
+                  });
+                }
+              } else {
+                // Not a file reference, use defaults
+                incrementFields.forEach((field) => {
+                  request.payload!.variables.push({
+                    name: field,
+                    type: "incremental",
+                    parameters: {
+                      baseValue: "1",
+                    },
+                  });
                 });
-              });
+              }
             }
           }
         }
@@ -581,15 +677,63 @@ export class UnifiedCommandParser implements CommandParser {
   }
 
   private detectOpenAPIFile(input: string): boolean {
+    // Only detect OpenAPI files if input contains explicit OpenAPI keywords
+    // Don't match every .json/.yaml file - only those explicitly mentioned as OpenAPI
     const openAPIPatterns = [
-      /@[\w\-_\/]+\.(yaml|yml|json)/i,
       /openapi/i,
       /swagger/i,
       /api\s+spec/i,
       /api\s+definition/i,
+      /@[\w\-_\/]*(openapi|swagger|api[-_]?spec|api[-_]?def)[\w\-_\/]*\.(yaml|yml|json)/i, // Filename contains OpenAPI keywords
     ];
 
     return openAPIPatterns.some((pattern) => pattern.test(input));
+  }
+
+  /**
+   * Check if a file is actually an OpenAPI specification by validating its structure
+   */
+  private async isOpenAPIFile(filePath: string): Promise<boolean> {
+    try {
+      const { FileResolver } = await import("../../../utils/file-resolver");
+      const fs = await import("fs");
+      const path = await import("path");
+      const yaml = await import("js-yaml");
+
+      const resolved = FileResolver.resolveFile(filePath);
+      if (!resolved.exists || !resolved.resolvedPath) {
+        return false;
+      }
+
+      const content = fs.readFileSync(resolved.resolvedPath, "utf8");
+      const fileExt = path.extname(resolved.resolvedPath).toLowerCase();
+
+      let parsed: any;
+      if (fileExt === ".yaml" || fileExt === ".yml") {
+        parsed = yaml.load(content);
+      } else if (fileExt === ".json") {
+        parsed = JSON.parse(content);
+      } else {
+        return false;
+      }
+
+      // Quick validation: OpenAPI files must have either:
+      // 1. openapi field (OpenAPI 3.x)
+      // 2. swagger field (Swagger/OpenAPI 2.0)
+      // 3. Both info and paths fields (minimal OpenAPI structure)
+      if (!parsed || typeof parsed !== "object") {
+        return false;
+      }
+
+      return (
+        parsed.openapi !== undefined ||
+        parsed.swagger !== undefined ||
+        (parsed.info && parsed.paths)
+      );
+    } catch (error) {
+      // If we can't read/parse the file, assume it's not OpenAPI
+      return false;
+    }
   }
 
   /**
@@ -603,16 +747,24 @@ export class UnifiedCommandParser implements CommandParser {
 
       const filePath = fileMatch[1];
 
+      // First, validate that this is actually an OpenAPI file
+      const isOpenAPI = await this.isOpenAPIFile(filePath);
+      if (!isOpenAPI) {
+        // Not an OpenAPI file, skip enhancement silently
+        return input;
+      }
+
       // Import OpenAPI parser
       const { OpenAPIParser } = await import(
         "../../../features/openapi/parser"
       );
       const parser = new OpenAPIParser();
 
-      // Parse the OpenAPI file
+      // Parse the OpenAPI file (FileResolver is used internally)
       const result = await parser.parseFromFile(filePath);
 
       if (!result.success) {
+        // Only log warning if we confirmed it's supposed to be an OpenAPI file
         console.warn(`Failed to parse OpenAPI file: ${filePath}`);
         return input;
       }
@@ -622,7 +774,7 @@ export class UnifiedCommandParser implements CommandParser {
 
       return `${input}\n\nOpenAPI Context:\n${enhancedContext}`;
     } catch (error) {
-      console.warn(`Error enhancing with OpenAPI context: ${error}`);
+      // Silently fail - don't log errors for non-OpenAPI files
       return input;
     }
   }

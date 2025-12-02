@@ -19,11 +19,19 @@ export class OpenAPIParser {
 
   /**
    * Parse OpenAPI specification from file
+   * File path is resolved from root directory (where CLI is executed)
    */
   async parseFromFile(filePath: string): Promise<OpenAPIParseResult> {
     try {
-      const content = fs.readFileSync(filePath, "utf8");
-      const fileExt = path.extname(filePath).toLowerCase();
+      // Use centralized file resolver (resolves from root directory)
+      const { FileResolver } = await import("../../utils/file-resolver");
+      const resolvedPath = FileResolver.resolveFile(filePath, {
+        throwIfNotFound: true,
+        defaultExtensions: [".yaml", ".yml", ".json"],
+      }).resolvedPath;
+      
+      const content = fs.readFileSync(resolvedPath, "utf8");
+      const fileExt = path.extname(resolvedPath).toLowerCase();
 
       if (fileExt === ".yaml" || fileExt === ".yml") {
         this.spec = yaml.load(content) as OpenAPISpec;

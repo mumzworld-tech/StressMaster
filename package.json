@@ -8,25 +8,23 @@
     "stressmaster": "./dist/cli.js",
     "sm": "./dist/cli.js"
   },
-  "files": [
-    "dist",
-    "config",
-    "README.md",
-    "LICENSE"
-  ],
   "scripts": {
     "build": "tsc",
+    "build:clean": "rm -rf dist && npm run build",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
-    "prepublishOnly": "npm run build",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "vitest run tests/e2e/",
     "test:watch": "vitest",
     "test:unit:watch": "vitest --config vitest.unit.config.ts",
     "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix"
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run typecheck && npm run lint && npm run test",
+    "security:audit": "npm audit --audit-level=moderate"
   },
   "keywords": [
     "load-testing",
@@ -53,7 +51,8 @@
   },
   "homepage": "https://github.com/yourusername/stressmaster#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   },
   "dependencies": {
     "@types/dockerode": "^3.3.42",
@@ -78,6 +77,7 @@
     "@types/ws": "^8.5.0",
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
+    "@vitest/coverage-v8": "^0.34.0",
     "eslint": "^8.50.0",
     "tsx": "^3.14.0",
     "typescript": "^5.2.0",

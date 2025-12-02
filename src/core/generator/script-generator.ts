@@ -41,7 +41,8 @@ export class K6ScriptGenerator implements ScriptGenerator {
     const template = this.selectTemplate(spec);
     const options = this.generateK6Options(
       spec.loadPattern,
-      spec.duration || { value: 30, unit: "seconds" }
+      spec.duration || { value: 30, unit: "seconds" },
+      spec.testType
     );
     const imports = this.generateImports(spec);
 
@@ -177,7 +178,8 @@ export class K6ScriptGenerator implements ScriptGenerator {
 
   private generateK6Options(
     loadPattern: LoadPattern,
-    duration: Duration
+    duration: Duration,
+    testType?: string
   ): K6Options {
     const options: K6Options = {};
     const patternGenerator = new LoadPatternGenerator();
@@ -225,14 +227,35 @@ export class K6ScriptGenerator implements ScriptGenerator {
       options.rps = loadPattern.requestsPerSecond;
     }
 
-    // Add default thresholds
+    // Add adaptive thresholds based on test type
+    const errorThreshold = this.getErrorThreshold(testType || "baseline");
     options.thresholds = {
       http_req_duration: ["p(95)<500"],
-      http_req_failed: ["rate<0.1"],
-      errors: ["rate<0.1"],
+      http_req_failed: [`rate<${errorThreshold}`],
+      errors: [`rate<${errorThreshold}`],
     };
 
     return options;
+  }
+
+  /**
+   * Get error rate threshold based on test type
+   * Spike and stress tests are expected to have higher error rates
+   */
+  private getErrorThreshold(testType: string): number {
+    switch (testType) {
+      case "spike":
+        return 0.5; // 50% - spike tests intentionally overwhelm servers
+      case "stress":
+        return 0.4; // 40% - stress tests push limits
+      case "endurance":
+        return 0.2; // 20% - endurance tests should be stable
+      case "volume":
+        return 0.3; // 30% - volume tests may have some errors under high load
+      case "baseline":
+      default:
+        return 0.1; // 10% - baseline tests should be stable
+    }
   }
 
   private generateImports(spec: LoadTestSpec): string[] {
@@ -282,7 +305,6 @@ function ${functionName}() {${headersCode}${payloadCode}
     ${validationCode}
     
     errorRate.add(response.status !== 200);
-    responseTime.add(response.timings.duration);
     
     return response;
 }`;
@@ -299,7 +321,14 @@ function ${functionName}() {${headersCode}${payloadCode}
     const ${name} = ${this.generateVariableCode(generator)};`;
     });
 
+    // Check if template is JSON or string
+    const isJsonTemplate =
+      payloadSpec.template.trim().startsWith("{") ||
+      payloadSpec.template.trim().startsWith("[");
+
     let templateCode = payloadSpec.template;
+
+    // Replace variables in template with template literal syntax
     payloadTemplate.variables.forEach((variable) => {
       templateCode = templateCode.replace(
         variable.placeholder,
@@ -307,9 +336,26 @@ function ${functionName}() {${headersCode}${payloadCode}
       );
     });
 
-    return `${generatorCode}
+    if (isJsonTemplate) {
+      // For JSON payloads, build object literal with variable interpolation
+      // Replace ${var} with + var + for string concatenation
+      const jsonCode = templateCode.replace(/\$\{([^}]+)\}/g, '" + $1 + "');
+
+      return `${generatorCode}
     
-    const payload = \`${templateCode}\`;`;
+    const payload = ${jsonCode};`;
+    } else {
+      // For string payloads, use template literal
+      // Escape backticks and dollar signs for safe embedding
+      const escaped = templateCode
+        .replace(/\\/g, "\\\\")
+        .replace(/`/g, "\\`")
+        .replace(/\$\{/g, "\\${");
+
+      return `${generatorCode}
+    
+    const payload = \`${escaped}\`;`;
+    }
   }
 
   private generateVariableCode(generator: VariableGenerator): string {

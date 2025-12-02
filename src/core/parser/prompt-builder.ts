@@ -4,6 +4,7 @@
  */
 
 import { LoadTestSpec } from "../../types";
+import { ParserUtils } from "./utils";
 
 export interface PromptExample {
   input: string;
@@ -46,101 +47,42 @@ export interface InputFormat {
 }
 
 export class PromptBuilder {
-  private static readonly SYSTEM_PROMPT = `You are StressMaster's AI assistant that converts natural language commands into structured load test specifications.
+  private static readonly SYSTEM_PROMPT = `You are StressMaster's AI assistant. Convert natural language commands into LoadTestSpec JSON.
 
-CRITICAL REQUIREMENTS:
-1. You MUST respond with ONLY valid JSON matching the exact LoadTestSpec schema below
-2. Generate deterministic, consistent output for similar inputs
-3. Use literal values from the command when provided
-4. Generate IDs as deterministic strings based on command content (e.g., "test-001", "workflow-auth")
-5. Do NOT use Date.now(), random() functions, or timestamps in IDs or output
-6. Extract exact URLs and HTTP methods from the command - do not substitute placeholder URLs
+CRITICAL: Respond with ONLY valid JSON, no markdown, no code blocks, no explanations.
 
-STRICT JSON SCHEMA (LoadTestSpec):
+REQUIRED SCHEMA:
 {
-  "id": "string (required) - deterministic ID like 'test-001' or 'workflow-auth'",
-  "name": "string (required) - descriptive test name",
-  "description": "string (required) - copy of original command or description",
-  "testType": "baseline" | "spike" | "stress" | "endurance" | "volume" | "workflow" | "batch" (required),
-  "requests": [
-    {
-      "method": "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS" (required),
-      "url": "string (required) - exact URL from command",
-      "headers": {"key": "value"} (optional),
-      "body": {} (optional - use for inline JSON payloads),
-      "payload": {
-        "template": "string",
-        "variables": []
-      } (optional - use for templated payloads),
-      "media": {
-        "files": [{"fieldName": "string", "filePath": "string"}],
-        "contentType": "multipart/form-data"
-      } (optional)
-    }
-  ] (required - at least one request, unless workflow/batch),
-  "workflow": [...] (optional - for multi-step workflows),
-  "batch": {...} (optional - for batch tests),
+  "id": "string (deterministic: test-{type}-{method}-{hash})",
+  "name": "string (descriptive)",
+  "description": "string (original command)",
+  "testType": "baseline" | "spike" | "stress" | "endurance" | "volume" | "workflow" | "batch",
+  "requests": [{
+    "method": "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
+    "url": "string (exact URL from command)",
+    "headers": {} (optional),
+    "body": {} (optional - for inline JSON),
+    "payload": {"template": "...", "variables": []} (optional - for file refs)
+  }],
   "loadPattern": {
-    "type": "constant" | "ramp-up" | "spike" | "step" | "random-burst" (required),
-    "virtualUsers": number (optional),
-    "requestsPerSecond": number (optional),
-    "rampUpTime": {"value": number, "unit": "seconds"|"minutes"|"hours"} (optional),
-    "stages": [...] (optional - for K6 stages)
-  } (required),
-  "duration": {
-    "value": number (required),
-    "unit": "seconds" | "minutes" | "hours" (required)
-  } (required)
+    "type": "constant" | "ramp-up" | "spike" | "step" | "random-burst",
+    "virtualUsers": number
+  },
+  "duration": {"value": number, "unit": "seconds" | "minutes" | "hours"}
 }
 
 EXTRACTION RULES:
-1. HTTP Method: Extract from command ("GET", "POST", "send X GET", etc.) - default to GET if not specified
-2. URL: Extract exact URL from command - NEVER use placeholder URLs like "api.example.com" unless that's what the user specified
-3. Payload: 
-   - If inline JSON provided, use "body" field
-   - If file reference (@file.json), use "payload.template" with file reference
-   - If natural language description, generate realistic sample payload in "body"
-4. Test Type: Infer from keywords:
-   - "spike" → spike
-   - "stress" → stress  
-   - "endurance" | "sustained" → endurance
-   - "volume" | "bulk" → volume
-   - "batch" | "multiple" → batch
-   - "workflow" | "first...then" → workflow
-   - default → baseline
-5. Load Pattern:
-   - Extract virtual users count from command ("10 requests", "50 users", etc.)
-   - Extract duration from command ("for 30 seconds", "over 5 minutes", etc.)
-   - Infer pattern type: "ramp up" → ramp-up, "spike" → spike, "constant" → constant
-6. IDs: Generate deterministic IDs based on content:
-   - "test-{type}-{method}-{endpoint-hash}"
-   - "workflow-{first-step}-{last-step}"
-   - "batch-{count}-tests"
+1. URL: Extract exact URL from command - NEVER use placeholders
+2. Method: Extract from command or default to GET
+3. Test Type: Infer from keywords (spike→spike, stress→stress, workflow→workflow, etc.)
+4. Load: Extract numbers ("10 requests" → virtualUsers: 10)
+5. Duration: Extract time ("30 seconds" → duration: {value: 30, unit: "seconds"})
+6. IDs: Generate deterministic: "test-{type}-{method}-{endpoint-hash}"
 
-WORKFLOW RECOGNITION:
-- Keywords: "first", "then", "next", "after", "start by", "followed by"
-- Sequential: steps execute in order
-- Parallel: "at the same time", "simultaneously", "in parallel"
-- Create workflow array with type: "sequential" | "parallel"
+WORKFLOW: Detect "first...then", "parallel", "sequential" → testType: "workflow"
+BATCH: Detect multiple endpoints or "batch" keyword → testType: "batch"
 
-BATCH RECOGNITION:
-- Keywords: "batch", "multiple APIs", "test all", "parallel test", "sequential test"
-- Multiple endpoints in single command: "GET api1.com, POST api2.com"
-- Create batch object with tests array
-
-MEDIA RECOGNITION:
-- Patterns: "file: @image.jpg", "upload @photo.png", "@document.pdf"
-- Create media object with files array
-
-DETERMINISTIC OUTPUT REQUIREMENTS:
-- Same command → same output (except for IDs which should be deterministic based on content)
-- Use literal values from command when available
-- Generate realistic sample data when not specified (e.g., "John Doe", "john@example.com")
-- Do NOT introduce random variables unless explicitly requested
-- Do NOT use template variables like {{faker.*}} or {{random.*}}
-
-RESPONSE FORMAT:
-Respond with ONLY the JSON object, no markdown formatting, no code blocks, no explanations.`;
+OUTPUT: Only JSON object, no markdown.`;
 
   private static readonly USER_PROMPT_TEMPLATE = `Parse this StressMaster command and convert it to a LoadTestSpec JSON following the strict schema:
 
@@ -1042,23 +984,99 @@ IMPORTANT:
   }
 
   static buildFullPrompt(input: string): string {
-    const examples = this.EXAMPLES.map(
-      (example) =>
-        `Input: "${example.input}"\nOutput: ${JSON.stringify(
-          example.output,
-          null,
-          2
-        )}`
-    ).join("\n\n");
+    // Create context for example selection
+    const context = this.createParseContext(input);
+
+    // Select only 3-5 most relevant examples (reduces token count by 60-80%)
+    const relevantExamples = this.selectRelevantExamples(context).slice(0, 5);
+
+    const examples = relevantExamples
+      .map(
+        (example) =>
+          `Input: "${example.input}"\nOutput: ${JSON.stringify(
+            example.output,
+            null,
+            2
+          )}`
+      )
+      .join("\n\n");
 
     return `${this.SYSTEM_PROMPT}
 
-Here are some examples:
+Here are ${relevantExamples.length} relevant examples:
 
 ${examples}
 
 Now parse this command:
 ${this.getUserPrompt(input)}`;
+  }
+
+  /**
+   * Create ParseContext from input string for example selection
+   */
+  private static createParseContext(input: string): ParseContext {
+    const structuredData = ParserUtils.extractStructuredData(input);
+
+    return {
+      originalInput: input,
+      confidence: 1.0,
+      ambiguities: [],
+      extractedComponents: {
+        methods: structuredData.methods,
+        urls: structuredData.urls,
+        counts: this.extractCounts(input),
+        bodies: structuredData.jsonBlocks,
+      },
+      inferredFields: {
+        testType: this.inferTestType(input),
+        loadPattern: this.inferLoadPatternType(input),
+      },
+    };
+  }
+
+  /**
+   * Extract counts (user counts, request counts) from input
+   */
+  private static extractCounts(input: string): number[] {
+    const counts: number[] = [];
+
+    // Extract request counts
+    const requestCount = this.extractRequestCount(input);
+    if (requestCount > 1) {
+      counts.push(requestCount);
+    }
+
+    // Extract user counts
+    const userCountMatch = input.match(
+      /\b(\d+)\s*(users?|concurrent|parallel)\b/i
+    );
+    if (userCountMatch) {
+      counts.push(parseInt(userCountMatch[1]));
+    }
+
+    return counts;
+  }
+
+  /**
+   * Infer load pattern type from input
+   */
+  private static inferLoadPatternType(input: string): string {
+    const lowerInput = input.toLowerCase();
+
+    if (lowerInput.includes("ramp") || lowerInput.includes("gradual")) {
+      return "ramp-up";
+    }
+    if (lowerInput.includes("spike")) {
+      return "spike";
+    }
+    if (lowerInput.includes("step")) {
+      return "step";
+    }
+    if (lowerInput.includes("random") || lowerInput.includes("burst")) {
+      return "random-burst";
+    }
+
+    return "constant";
   }
 
   private static selectRelevantExamples(
@@ -1072,10 +1090,10 @@ ${this.getUserPrompt(input)}`;
       relevanceScore: this.calculateRelevanceScore(example, context),
     }));
 
-    // Sort by relevance and select top examples
+    // Sort by relevance and select top 5 examples (increased from 3 for better coverage)
     scoredExamples
       .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
-      .slice(0, 3)
+      .slice(0, 5)
       .forEach((example) => selectedExamples.push(example));
 
     return selectedExamples;

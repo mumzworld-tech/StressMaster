@@ -108,6 +108,11 @@ export class InteractiveCLI implements CLIInterface {
           continue;
         }
 
+        // Handle structured commands (config, file, results, etc.)
+        if (await this.handleStructuredCommand(input)) {
+          continue;
+        }
+
         await this.executeCommand(input);
       } catch (error) {
         this.displayManager.displayError(
@@ -119,9 +124,67 @@ export class InteractiveCLI implements CLIInterface {
 
   private async promptForCommand(options: CLIPromptOptions): Promise<string> {
     const readline = require("readline");
+    const { FileAutocomplete } = await import("./file-autocomplete");
+
+    // Check if autocomplete is enabled
+    if (!this.sessionManager.getConfig().autoComplete) {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      return new Promise((resolve) => {
+        rl.question(options.message, (answer: string) => {
+          rl.close();
+          resolve(answer);
+        });
+      });
+    }
+
+    // Enhanced readline with autocomplete support
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
+      completer: (line: string) => {
+        const cursorPos = line.length;
+
+        // Check if we should trigger file autocomplete
+        if (FileAutocomplete.shouldTrigger(line, cursorPos)) {
+          const suggestions = FileAutocomplete.getFileSuggestions(
+            line,
+            cursorPos
+          );
+          if (suggestions.length > 0) {
+            // Extract the partial filename after @
+            const lastAt = line.lastIndexOf("@");
+            if (lastAt !== -1) {
+              const afterAt = line.substring(lastAt + 1);
+              const spaceIndex = afterAt.indexOf(" ");
+              const partialFilename =
+                spaceIndex === -1 ? afterAt : afterAt.substring(0, spaceIndex);
+
+              // Return matching suggestions
+              const matches = suggestions
+                .map((s) => s.text.substring(1)) // Remove @ prefix
+                .filter((filename) => filename.startsWith(partialFilename));
+
+              return [matches, partialFilename];
+            }
+          }
+        }
+
+        // Fallback to history suggestions
+        if (options.history && options.history.length > 0) {
+          const historyMatches = options.history
+            .filter((cmd) => cmd.toLowerCase().includes(line.toLowerCase()))
+            .slice(0, 10);
+          if (historyMatches.length > 0) {
+            return [historyMatches, line];
+          }
+        }
+
+        return [[], line];
+      },
     });
 
     return new Promise((resolve) => {
@@ -306,12 +369,12 @@ export class InteractiveCLI implements CLIInterface {
           chalk.gray("   ├─ Execution Mode: ") +
             chalk.white.bold(spec.batch.executionMode)
         );
-        const totalRequests = spec.batch.tests.reduce((sum, test) => 
-          sum + (test.loadPattern?.virtualUsers || 1), 0
+        const totalRequests = spec.batch.tests.reduce(
+          (sum, test) => sum + (test.loadPattern?.virtualUsers || 1),
+          0
         );
         console.log(
-          chalk.gray("   └─ Total Requests: ") +
-            chalk.white.bold(totalRequests)
+          chalk.gray("   └─ Total Requests: ") + chalk.white.bold(totalRequests)
         );
       } else {
         // Handle single tests
@@ -687,5 +750,492 @@ export class InteractiveCLI implements CLIInterface {
     console.log(chalk.white("  • Enum values and patterns"));
     console.log(chalk.white("  • Required vs optional fields"));
     console.log();
+  }
+
+  /**
+   * Handle structured commands from interactive CLI
+   * Routes commands like "config show", "file list", "results list" to their handlers
+   */
+  private async handleStructuredCommand(input: string): Promise<boolean> {
+    const trimmed = input.trim();
+    const parts = trimmed.split(/\s+/);
+    const command = parts[0]?.toLowerCase();
+
+    try {
+      // Handle config commands
+      if (command === "config" || command === "cfg") {
+        await this.handleConfigCommand(parts.slice(1));
+        return true;
+      }
+
+      // Handle file commands
+      if (command === "file" || command === "f") {
+        await this.handleFileCommand(parts.slice(1));
+        return true;
+      }
+
+      // Handle results commands
+      if (command === "results" || command === "result") {
+        await this.handleResultsCommand(parts.slice(1));
+        return true;
+      }
+
+      // Handle template commands
+      if (command === "template" || command === "templates") {
+        await this.handleTemplateCommand(parts.slice(1));
+        return true;
+      }
+
+      return false; // Not a structured command, continue with natural language parsing
+    } catch (error) {
+      this.displayManager.displayError(
+        `Command failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return true; // Command was handled (even if it failed)
+    }
+  }
+
+  /**
+   * Handle config commands
+   */
+  private async handleConfigCommand(args: string[]): Promise<void> {
+    const { ConfigManagementService } = await import(
+      "../../services/config-management.service"
+    );
+    const configService = new ConfigManagementService();
+
+    const subcommand = args[0]?.toLowerCase();
+
+    switch (subcommand) {
+      case "show":
+        const config = await configService.getConfig();
+
+        // Get actual AI provider from runtime configuration
+        const actualAIProvider = this.getActualAIProvider();
+
+        console.log(chalk.blue.bold("\n⚙️  StressMaster Configuration\n"));
+        console.log(
+          `  ${chalk.yellow("Root Directory:")} ${config.rootDirectory}`
+        );
+        console.log(
+          `  ${chalk.yellow("Default Duration:")} ${config.defaultDuration}s`
+        );
+        console.log(
+          `  ${chalk.yellow("Default Virtual Users:")} ${
+            config.defaultVirtualUsers
+          }`
+        );
+        console.log(
+          `  ${chalk.yellow("AI Provider:")} ${chalk.cyan(
+            actualAIProvider.provider
+          )}${
+            actualAIProvider.source
+              ? chalk.gray(` (from ${actualAIProvider.source})`)
+              : ""
+          }`
+        );
+        if (actualAIProvider.model) {
+          console.log(
+            `  ${chalk.yellow("AI Model:")} ${chalk.cyan(
+              actualAIProvider.model
+            )}`
+          );
+        }
+        console.log(
+          `  ${chalk.yellow("Cache Enabled:")} ${
+            config.cacheEnabled ? "Yes" : "No"
+          }`
+        );
+        console.log(
+          `  ${chalk.yellow("Verbose:")} ${config.verbose ? "Yes" : "No"}`
+        );
+        console.log(
+          `  ${chalk.yellow("Output Format:")} ${config.outputFormat}`
+        );
+        console.log();
+        break;
+
+      case "set":
+        if (args.length < 3) {
+          console.log(chalk.red("❌ Usage: config set <key> <value>"));
+          return;
+        }
+        const key = args[1];
+        const value = args.slice(2).join(" ");
+        let parsedValue: any = value;
+
+        if (!isNaN(Number(value)) && value.trim() !== "") {
+          parsedValue = Number(value);
+        } else if (value.toLowerCase() === "true") {
+          parsedValue = true;
+        } else if (value.toLowerCase() === "false") {
+          parsedValue = false;
+        }
+
+        await configService.setConfig(key, parsedValue);
+        console.log(
+          chalk.green(`✅ Configuration updated: ${key} = ${parsedValue}`)
+        );
+        break;
+
+      case "init":
+        const configPath = await configService.initConfig();
+        console.log(
+          chalk.green(`✅ Configuration initialized at: ${configPath}`)
+        );
+        break;
+
+      default:
+        console.log(chalk.blue("\n📋 Config Commands:"));
+        console.log(
+          chalk.white("  config show          - Display current configuration")
+        );
+        console.log(
+          chalk.white("  config set <key> <value> - Set configuration value")
+        );
+        console.log(
+          chalk.white("  config init          - Initialize configuration file")
+        );
+        console.log();
+    }
+  }
+
+  /**
+   * Handle file commands
+   */
+  private async handleFileCommand(args: string[]): Promise<void> {
+    const { FileManagementService } = await import(
+      "../../services/file-management.service"
+    );
+    const fileService = new FileManagementService();
+
+    const subcommand = args[0]?.toLowerCase();
+
+    switch (subcommand) {
+      case "list":
+        const pattern = args[1];
+        const files = await fileService.listFiles(pattern);
+
+        if (files.length === 0) {
+          console.log(chalk.yellow("No files found"));
+          return;
+        }
+
+        console.log(chalk.blue.bold(`\n📁 Found ${files.length} file(s):\n`));
+
+        // Group by type
+        const grouped = files.reduce((acc, file) => {
+          if (!acc[file.type]) acc[file.type] = [];
+          acc[file.type].push(file);
+          return acc;
+        }, {} as Record<string, typeof files>);
+
+        for (const [type, typeFiles] of Object.entries(grouped)) {
+          console.log(chalk.yellow.bold(`  ${type.toUpperCase()}:`));
+          for (const file of typeFiles) {
+            const size = this.formatFileSize(file.size);
+            console.log(
+              `    ${chalk.cyan(`@${file.name}`)} ${chalk.gray(`(${size})`)}`
+            );
+          }
+          console.log();
+        }
+        break;
+
+      case "validate":
+        if (args.length < 2) {
+          console.log(chalk.red("❌ Usage: file validate <file>"));
+          return;
+        }
+        const fileRef = args[1];
+        const result = await fileService.validateFile(fileRef);
+
+        if (result.valid) {
+          console.log(chalk.green.bold("\n✅ File is valid\n"));
+          console.log(`  Path: ${chalk.cyan(result.path)}`);
+          console.log(`  Size: ${this.formatFileSize(result.size)}`);
+        } else {
+          console.log(chalk.red.bold("\n❌ File validation failed\n"));
+          if (result.errors) {
+            result.errors.forEach((error) => {
+              console.log(chalk.red(`  • ${error}`));
+            });
+          }
+        }
+        break;
+
+      case "search":
+        if (args.length < 2) {
+          console.log(chalk.red("❌ Usage: file search <pattern>"));
+          return;
+        }
+        const searchPattern = args[1];
+        const searchResults = await fileService.searchFiles(searchPattern);
+
+        if (searchResults.length === 0) {
+          console.log(
+            chalk.yellow(`No files found matching "${searchPattern}"`)
+          );
+          return;
+        }
+
+        console.log(
+          chalk.blue.bold(
+            `\n🔍 Found ${searchResults.length} file(s) matching "${searchPattern}":\n`
+          )
+        );
+
+        for (const file of searchResults) {
+          const size = this.formatFileSize(file.size);
+          console.log(
+            `  ${chalk.cyan(`@${file.name}`)} ${chalk.gray(
+              `(${size})`
+            )} → ${chalk.dim(file.path)}`
+          );
+        }
+        console.log();
+        break;
+
+      default:
+        console.log(chalk.blue("\n📁 File Commands:"));
+        console.log(
+          chalk.white(
+            "  file list [pattern]    - List files that can be used with @"
+          )
+        );
+        console.log(
+          chalk.white("  file validate <file> - Validate a file reference")
+        );
+        console.log(chalk.white("  file search <pattern> - Search for files"));
+        console.log();
+    }
+  }
+
+  /**
+   * Handle results commands
+   */
+  private async handleResultsCommand(args: string[]): Promise<void> {
+    const subcommand = args[0]?.toLowerCase();
+
+    switch (subcommand) {
+      case "list":
+        const fs = await import("fs");
+        const path = await import("path");
+
+        const resultsDir = path.join(process.cwd(), ".stressmaster", "results");
+        if (!fs.existsSync(resultsDir)) {
+          console.log(chalk.yellow("No results directory found"));
+          return;
+        }
+
+        const resultFiles = fs
+          .readdirSync(resultsDir)
+          .filter((f) => f.endsWith(".json"))
+          .sort()
+          .reverse()
+          .slice(0, 20);
+
+        if (resultFiles.length === 0) {
+          console.log(chalk.yellow("No test results found"));
+          return;
+        }
+
+        console.log(
+          chalk.blue.bold(`\n📊 Recent Test Results (${resultFiles.length}):\n`)
+        );
+
+        for (const file of resultFiles) {
+          const filePath = path.join(resultsDir, file);
+          const content = fs.readFileSync(filePath, "utf8");
+          const result = JSON.parse(content);
+          const testId = file.replace(".json", "");
+          const status = result.status === "completed" ? "✅" : "❌";
+          const requests = result.metrics?.totalRequests || 0;
+
+          console.log(
+            `  ${status} ${chalk.cyan(testId.substring(0, 50))} - ${chalk.gray(
+              `${requests} requests`
+            )}`
+          );
+        }
+        console.log();
+        break;
+
+      case "show":
+        if (args.length < 2) {
+          console.log(chalk.red("❌ Usage: results show <id>"));
+          return;
+        }
+        const id = args[1];
+        const fs2 = await import("fs");
+        const path2 = await import("path");
+
+        const resultsDir2 = path2.join(
+          process.cwd(),
+          ".stressmaster",
+          "results"
+        );
+        const resultFile = path2.join(resultsDir2, `${id}.json`);
+
+        if (!fs2.existsSync(resultFile)) {
+          console.error(chalk.red(`Result not found: ${id}`));
+          return;
+        }
+
+        const content = fs2.readFileSync(resultFile, "utf8");
+        const result = JSON.parse(content);
+
+        console.log(chalk.blue.bold(`\n📊 Test Result: ${id}\n`));
+        console.log(`  Status: ${chalk.cyan(result.status)}`);
+        if (result.metrics) {
+          console.log(
+            `  Requests: ${chalk.cyan(result.metrics.totalRequests || 0)}`
+          );
+          console.log(
+            `  Success: ${chalk.green(result.metrics.successfulRequests || 0)}`
+          );
+          console.log(
+            `  Failed: ${chalk.red(result.metrics.failedRequests || 0)}`
+          );
+        }
+        console.log();
+        break;
+
+      default:
+        console.log(chalk.blue("\n📊 Results Commands:"));
+        console.log(
+          chalk.white("  results list         - List recent test results")
+        );
+        console.log(
+          chalk.white("  results show <id>    - Show detailed test result")
+        );
+        console.log();
+    }
+  }
+
+  /**
+   * Handle template commands
+   */
+  private async handleTemplateCommand(args: string[]): Promise<void> {
+    const { TemplateManagementService } = await import(
+      "../../services/template-management.service"
+    );
+    const templateService = new TemplateManagementService();
+
+    const subcommand = args[0]?.toLowerCase();
+
+    switch (subcommand) {
+      case "list":
+        const templates = await templateService.listTemplates();
+
+        if (templates.length === 0) {
+          console.log(chalk.yellow("No templates found"));
+          return;
+        }
+
+        console.log(
+          chalk.blue.bold(`\n📋 Available Templates (${templates.length}):\n`)
+        );
+
+        for (const template of templates) {
+          console.log(
+            `  ${chalk.cyan(template.name)} ${chalk.gray(
+              `- ${template.description || ""}`
+            )}`
+          );
+        }
+        console.log();
+        break;
+
+      default:
+        console.log(chalk.blue("\n📋 Template Commands:"));
+        console.log(
+          chalk.white("  template list        - List available templates")
+        );
+        console.log();
+    }
+  }
+
+  /**
+   * Format file size helper
+   */
+  private formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  /**
+   * Get actual AI provider configuration from runtime sources
+   * Checks: environment variables -> config/ai-config.json -> API key detection -> defaults
+   */
+  private getActualAIProvider(): {
+    provider: string;
+    model?: string;
+    source?: string;
+  } {
+    // Check environment variables first (highest priority)
+    if (process.env.AI_PROVIDER) {
+      return {
+        provider: process.env.AI_PROVIDER,
+        model: process.env.AI_MODEL,
+        source: "environment variable (AI_PROVIDER)",
+      };
+    }
+
+    // Check config/ai-config.json file
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      const configPath = path.join(process.cwd(), "config", "ai-config.json");
+
+      if (fs.existsSync(configPath)) {
+        const configContent = fs.readFileSync(configPath, "utf8");
+        const aiConfig = JSON.parse(configContent);
+
+        if (aiConfig.provider) {
+          return {
+            provider: aiConfig.provider,
+            model: aiConfig.model,
+            source: "config/ai-config.json",
+          };
+        }
+      }
+    } catch (error) {
+      // Ignore errors, continue to detection
+    }
+
+    // Detect provider from API keys (if set)
+    if (process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY) {
+      // Check if it's Claude based on API key format or other indicators
+      const apiKey =
+        process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY || "";
+
+      // Claude API keys typically start with "sk-ant-"
+      if (apiKey.startsWith("sk-ant-") || process.env.ANTHROPIC_API_KEY) {
+        return {
+          provider: "claude",
+          model: process.env.AI_MODEL || "claude-3-5-sonnet-20241022",
+          source: "environment variable (ANTHROPIC_API_KEY)",
+        };
+      }
+
+      // OpenAI keys start with "sk-"
+      if (apiKey.startsWith("sk-") && !apiKey.startsWith("sk-ant-")) {
+        return {
+          provider: "openai",
+          model: process.env.AI_MODEL,
+          source: "environment variable (AI_API_KEY)",
+        };
+      }
+    }
+
+    // Default
+    return {
+      provider: "ollama",
+      source: "default",
+    };
   }
 }

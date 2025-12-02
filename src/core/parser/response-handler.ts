@@ -66,22 +66,30 @@ export class ResponseHandler {
       let parsedSpec: LoadTestSpec;
 
       try {
-        // First try to parse as JSON
+        // Parse as JSON - should always be LoadTestSpec format now
         const parsedJson = JSON.parse(cleanedResponse);
 
-        // Check if this is AI's simple format (has method, url, body directly)
+        // Validate it's LoadTestSpec format (has required fields)
         if (
+          parsedJson.requests &&
+          Array.isArray(parsedJson.requests) &&
+          parsedJson.requests.length > 0
+        ) {
+          // Valid LoadTestSpec format
+          parsedSpec = parsedJson as LoadTestSpec;
+        } else if (
           parsedJson.method &&
           parsedJson.url &&
-          (parsedJson.body || parsedJson.headers)
+          !parsedJson.requests
         ) {
+          // Legacy simple format - convert for backward compatibility
+          // This should rarely happen now that all prompts use LoadTestSpec
           parsedSpec = this.convertSimpleFormatToLoadTestSpec(
             parsedJson,
             originalInput
           );
         } else {
-          // Try to parse as LoadTestSpec format
-          parsedSpec = parsedJson as LoadTestSpec;
+          throw new Error("Invalid response format - missing required fields");
         }
       } catch (error) {
         console.warn("AI response JSON parsing failed:", error);
@@ -199,6 +207,79 @@ export class ResponseHandler {
     return spec;
   }
 
+  /**
+   * Extract base values from file for incrementing fields
+   */
+  private static extractBaseValuesFromFile(
+    fileReference: string,
+    incrementFields: string[]
+  ): VariableDefinition[] {
+    const { FileResolver } = require("../../utils/file-resolver");
+    const fs = require("fs");
+
+    try {
+      // Resolve and read the file
+      const filePath = fileReference.substring(1); // Remove @
+      const resolved = FileResolver.resolveFile(filePath);
+
+      if (resolved.exists && resolved.resolvedPath) {
+        const fileContent = fs.readFileSync(resolved.resolvedPath, "utf8");
+        const jsonData = JSON.parse(fileContent);
+
+        // Helper to find nested field value
+        const findNestedValue = (obj: any, fieldName: string): any => {
+          if (obj === null || obj === undefined) return undefined;
+          if (typeof obj !== "object") return undefined;
+
+          // Check direct property (case-insensitive)
+          for (const key in obj) {
+            if (key.toLowerCase() === fieldName.toLowerCase()) {
+              return obj[key];
+            }
+          }
+
+          // Check nested objects
+          for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              const nested = findNestedValue(obj[key], fieldName);
+              if (nested !== undefined) {
+                return nested;
+              }
+            }
+          }
+
+          return undefined;
+        };
+
+        // Extract base values for each increment field
+        return incrementFields.map((field) => {
+          const baseValue = findNestedValue(jsonData, field);
+          return {
+            name: field,
+            type: "incremental" as const,
+            parameters: {
+              baseValue: baseValue !== undefined ? String(baseValue) : "1",
+            },
+          };
+        });
+      }
+    } catch (error) {
+      console.warn(
+        `⚠️ Could not extract base values from file ${fileReference}:`,
+        error
+      );
+    }
+
+    // Fallback: return variables with default values
+    return incrementFields.map((field) => ({
+      name: field,
+      type: "incremental" as const,
+      parameters: {
+        baseValue: "1",
+      },
+    }));
+  }
+
   private static enhanceRequestSpec(
     request: RequestSpec,
     originalInput: string
@@ -231,16 +312,17 @@ export class ResponseHandler {
       // Handle file references in string body
       if (typeof request.body === "string" && request.body.startsWith("@")) {
         console.log("🔍 DEBUG: File reference detected in body string");
+
+        // Extract base values from the file
+        const variables = this.extractBaseValuesFromFile(
+          request.body,
+          incrementFields
+        );
+
         // Convert string file reference to proper payload structure
         request.payload = {
           template: request.body,
-          variables: incrementFields.map((field) => ({
-            name: field,
-            type: "incremental" as const,
-            parameters: {
-              baseValue: "1",
-            },
-          })),
+          variables: variables,
         };
         delete request.body;
         return request;

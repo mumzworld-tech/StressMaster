@@ -181,30 +181,22 @@ export class MediaProcessor {
   }
 
   /**
-   * Resolve file path (handle relative paths)
+   * Resolve file path using centralized FileResolver
+   * All files are resolved from root directory (where CLI is executed)
    */
   private static resolveFilePath(filePath: string): string {
-    if (path.isAbsolute(filePath)) {
-      return filePath;
+    // Use centralized file resolver for consistent behavior
+    // Note: Using require for sync compatibility
+    const { FileResolver } = require("../../utils/file-resolver");
+    
+    try {
+      const result = FileResolver.resolveFile(filePath, {
+        throwIfNotFound: false, // Don't throw, let caller handle
+      });
+      return result.exists ? result.resolvedPath : filePath;
+    } catch {
+      return filePath; // Return original if resolution fails
     }
-
-    // Try relative to current working directory
-    const resolvedPath = path.resolve(process.cwd(), filePath);
-
-    if (fs.existsSync(resolvedPath)) {
-      return resolvedPath;
-    }
-
-    // Try relative to project root
-    const projectRoot = path.resolve(process.cwd());
-    const projectPath = path.join(projectRoot, filePath);
-
-    if (fs.existsSync(projectPath)) {
-      return projectPath;
-    }
-
-    // Return original path if not found (will be handled by caller)
-    return filePath;
   }
 
   /**

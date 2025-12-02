@@ -519,6 +519,7 @@ export default function () {
 
   /**
    * Generate individual step function
+   * Generates proper K6 HTTP request code for workflow steps
    */
   private generateStepFunction(step: WorkflowStep): string {
     const stepId = step.id || "step";
@@ -526,14 +527,67 @@ export default function () {
       stepId.charAt(0).toUpperCase() + stepId.slice(1)
     }`;
 
-    // For now, return a placeholder since the new workflow structure is different
+    // Check if this is a WorkflowRequest (new structure)
+    if ("method" in step && "url" in step) {
+      const workflowRequest = step as WorkflowRequest;
+      const method = workflowRequest.method.toLowerCase();
+      const url = workflowRequest.url;
+      const headers = JSON.stringify(workflowRequest.headers || {});
+      const body = workflowRequest.body ? JSON.stringify(workflowRequest.body) : "null";
+      const requestCount = workflowRequest.requestCount || 1;
+
+      // Generate proper K6 HTTP request
+      let requestCode = "";
+      if (method === "get") {
+        requestCode = `const response = http.get('${url}', { headers: ${headers} });`;
+      } else if (method === "post") {
+        requestCode = `const response = http.post('${url}', ${body}, { headers: ${headers} });`;
+      } else if (method === "put") {
+        requestCode = `const response = http.put('${url}', ${body}, { headers: ${headers} });`;
+      } else if (method === "delete") {
+        requestCode = `const response = http.del('${url}', null, { headers: ${headers} });`;
+      } else {
+        requestCode = `const response = http.request('${method.toUpperCase()}', '${url}', ${body === "null" ? "null" : body}, { headers: ${headers} });`;
+      }
+
+      return `
+function ${functionName}(baseUrl, data) {
+  // Step: ${step.name || "Step"} - ${method.toUpperCase()} ${url}
+  ${requestCode}
+  
+  // Validate response
+  check(response, {
+    'status is 200': (r) => r.status === 200,
+    'response time < 5000ms': (r) => r.timings.duration < 5000,
+  });
+  
+  // Extract data for correlation (if needed)
+  let extractedData = {};
+  if (response.body) {
+    try {
+      extractedData = JSON.parse(response.body);
+    } catch (e) {
+      // Not JSON, skip extraction
+    }
+  }
+  
+  // Store in data object for next steps
+  data['${stepId}'] = extractedData;
+  
+  return response;
+}
+`;
+    }
+
+    // Legacy workflow step structure (fallback)
     return `
 function ${functionName}(baseUrl, data) {
-  // TODO: Update for new workflow structure
-  console.log('Executing step: ${step.name || "Step"}');
+  // Legacy workflow step: ${step.name || "Step"}
+  const response = http.get(baseUrl + '/${stepId}', { headers: {} });
   
-  // Placeholder for workflow execution
-  const response = { status: 200, body: '{}' };
+  check(response, {
+    'status is 200': (r) => r.status === 200,
+  });
   
   return response;
 }
@@ -541,11 +595,11 @@ function ${functionName}(baseUrl, data) {
   }
 
   /**
-   * Generate data extraction code
+   * Generate data extraction code for workflow steps
    */
   private generateDataExtraction(step: WorkflowStep): string {
-    // TODO: Update for new workflow structure
-    // For now, return empty string since dataExtraction is not in the new structure
+    // Data extraction is now handled inline in generateStepFunction
+    // This method is kept for backward compatibility
     return "";
   }
 }

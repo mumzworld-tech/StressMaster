@@ -268,22 +268,22 @@ export class FallbackParser {
     // Check for file references - both @filename.json and natural language patterns
     const fileMatch = this.extractFileReference(input);
     if (fileMatch) {
-      const filename = fileMatch;
       try {
-        const fs = require("fs");
-        const path = require("path");
-        const filePath = path.join(process.cwd(), filename);
-
-        if (fs.existsSync(filePath)) {
-          const fileContent = fs.readFileSync(filePath, "utf8");
-          console.log(`📁 Loaded JSON from file: ${filename}`);
-          bodies.push(fileContent);
-          return bodies;
-        } else {
-          console.warn(`⚠️ File not found: ${filename}`);
-        }
+        // Use centralized file resolver (resolves from root directory)
+        // Note: Using sync version since this method is not async
+        const { FileResolver } = require("../../utils/file-resolver");
+        const fileContent = FileResolver.resolveFileSync(`@${fileMatch}`);
+        
+        console.log(`📁 Loaded JSON from file: ${fileMatch}`);
+        bodies.push(fileContent);
+        return bodies;
       } catch (error) {
-        console.warn(`⚠️ Error reading file ${filename}:`, error);
+        // FileResolver provides helpful error messages with suggestions
+        if (error instanceof Error) {
+          console.warn(`⚠️ ${error.message}`);
+        } else {
+          console.warn(`⚠️ Error reading file ${fileMatch}:`, error);
+        }
       }
     }
 
