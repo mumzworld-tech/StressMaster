@@ -1,6 +1,7 @@
 import { LoadTestSpec } from "../../types";
 import * as fs from "fs";
 import * as path from "path";
+import { requireStressMasterDir } from "../../utils/require-stressmaster-dir";
 
 export interface ParseCacheConfig {
   maxSize: number;
@@ -23,8 +24,12 @@ export class ParseCache {
 
   constructor(config: ParseCacheConfig) {
     this.config = config;
-    this.cacheFilePath =
-      config.cacheFile || path.join(process.cwd(), "cache", "parse-cache.json");
+    if (config.cacheFile) {
+      this.cacheFilePath = config.cacheFile;
+    } else {
+      const { getParseCachePath } = requireStressMasterDir();
+      this.cacheFilePath = getParseCachePath();
+    }
 
     // Create cache directory if it doesn't exist
     const cacheDir = path.dirname(this.cacheFilePath);
@@ -70,13 +75,17 @@ export class ParseCache {
     // Check cache size limit and entry size
     const specSize = JSON.stringify(spec).length;
     const maxEntrySize = 10000; // 10KB limit per entry
-    
+
     // Skip caching very large entries (like complex batch tests)
     if (specSize > maxEntrySize) {
-      console.log(`📦 Skipping cache for large entry (${(specSize/1024).toFixed(1)}KB): ${key}`);
+      console.log(
+        `📦 Skipping cache for large entry (${(specSize / 1024).toFixed(
+          1
+        )}KB): ${key}`
+      );
       return;
     }
-    
+
     if (this.cache.size >= this.config.maxSize) {
       // Remove oldest entry
       const oldestKey = this.cache.keys().next().value;
@@ -89,7 +98,9 @@ export class ParseCache {
       spec,
       timestamp: Date.now(),
       fileDependencies,
-      fileModTimes: fileDependencies ? this.getFileModTimes(fileDependencies) : undefined,
+      fileModTimes: fileDependencies
+        ? this.getFileModTimes(fileDependencies)
+        : undefined,
     });
 
     // Save to disk if persistent
@@ -197,7 +208,7 @@ export class ParseCache {
         if (fs.existsSync(filePath)) {
           const currentModTime = fs.statSync(filePath).mtime.getTime();
           const cachedModTime = entry.fileModTimes[filePath];
-          
+
           if (!cachedModTime || currentModTime > cachedModTime) {
             console.log(`🗂️  File dependency changed: ${filePath}`);
             return false; // File has been modified
@@ -214,7 +225,7 @@ export class ParseCache {
     }
   }
 
-    // Get cache statistics
+  // Get cache statistics
   getStats(): {
     size: number;
     filePath: string;

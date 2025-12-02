@@ -77,6 +77,30 @@ npm run build
 npm install -g .
 ```
 
+#### Option C: Testing Locally in Another Project (Development)
+
+To test StressMaster locally in another project before publishing:
+
+```bash
+# In StressMaster directory
+npm install
+npm run build
+npm link
+
+# In your test project directory
+npm link stressmaster
+
+# Now use StressMaster in your project
+stressmaster --version
+```
+
+📖 **See [LOCAL_TESTING_GUIDE.md](./LOCAL_TESTING_GUIDE.md) for detailed instructions** on:
+
+- Testing StressMaster locally using `npm link`
+- Using `npm pack` for production-like testing
+- Verifying file resolution in other projects
+- Configuration when testing locally
+
 ### 2. First Load Test
 
 After installation, you can immediately start using StressMaster:

@@ -139,7 +139,11 @@ export class SessionManager {
 
   private displayAIProviderInfo(): void {
     try {
-      const aiConfigPath = path.join(process.cwd(), "config", "ai-config.json");
+      const {
+        requireStressMasterDir,
+      } = require("../../utils/require-stressmaster-dir");
+      const { getAIConfigPath } = requireStressMasterDir();
+      const aiConfigPath = getAIConfigPath();
       const aiConfig = JSON.parse(readFileSync(aiConfigPath, "utf8"));
 
       console.log(chalk.green("🤖 AI Provider:"));

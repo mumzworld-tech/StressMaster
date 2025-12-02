@@ -603,12 +603,9 @@ export class InteractiveCLI implements CLIInterface {
     try {
       const fs = await import("fs");
       const path = await import("path");
+      const { getCacheDir } = await import("../../utils/stressmaster-dir");
 
-      const resultFile = path.join(
-        process.cwd(),
-        "cache",
-        "last-test-result.json"
-      );
+      const resultFile = path.join(getCacheDir(), "last-test-result.json");
 
       if (fs.existsSync(resultFile)) {
         const data = fs.readFileSync(resultFile, "utf8");
@@ -631,12 +628,9 @@ export class InteractiveCLI implements CLIInterface {
     try {
       const fs = await import("fs");
       const path = await import("path");
+      const { getCacheDir } = await import("../../utils/stressmaster-dir");
 
-      const resultFile = path.join(
-        process.cwd(),
-        "cache",
-        "last-test-result.json"
-      );
+      const resultFile = path.join(getCacheDir(), "last-test-result.json");
       const data = JSON.stringify(result, null, 2);
 
       fs.writeFileSync(resultFile, data, "utf8");
@@ -1189,7 +1183,11 @@ export class InteractiveCLI implements CLIInterface {
     try {
       const fs = require("fs");
       const path = require("path");
-      const configPath = path.join(process.cwd(), "config", "ai-config.json");
+      const {
+        requireStressMasterDir,
+      } = require("../../utils/require-stressmaster-dir");
+      const { getAIConfigPath } = requireStressMasterDir();
+      const configPath = getAIConfigPath();
 
       if (fs.existsSync(configPath)) {
         const configContent = fs.readFileSync(configPath, "utf8");

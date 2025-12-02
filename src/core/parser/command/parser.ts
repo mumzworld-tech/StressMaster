@@ -24,6 +24,7 @@ import {
 import { RateLimiter } from "../rate-limiter";
 import { ParseCache } from "../parse-cache";
 import * as path from "path";
+import { requireStressMasterDir } from "../../../utils/require-stressmaster-dir";
 
 export class UnifiedCommandParser implements CommandParser {
   private aiProvider!: AIProvider;
@@ -54,11 +55,12 @@ export class UnifiedCommandParser implements CommandParser {
       burstSize: 10,
     });
 
+    const { getParseCachePath } = requireStressMasterDir();
     this.parseCache = new ParseCache({
       maxSize: 1000,
       ttlMinutes: 60,
       persistent: true, // Enable persistent storage
-      cacheFile: path.join(process.cwd(), "cache", "parse-cache.json"),
+      cacheFile: getParseCachePath(),
     });
   }
 
@@ -66,19 +68,25 @@ export class UnifiedCommandParser implements CommandParser {
     try {
       // Load AI configuration from config file
       const fs = await import("fs");
-      const path = await import("path");
-
-      const configPath = path.join(process.cwd(), "config", "ai-config.json");
+      const { getAIConfigPath } = requireStressMasterDir();
+      const configPath = getAIConfigPath();
       let aiConfigFromFile: any = {};
 
       try {
         const configContent = fs.readFileSync(configPath, "utf8");
         aiConfigFromFile = JSON.parse(configContent);
-      } catch (configError) {
-        console.warn(
-          `Failed to load AI config from ${configPath}:`,
-          configError
-        );
+      } catch (configError: any) {
+        // Silently handle missing config file - this is expected for first-time setup
+        if (configError?.code === "ENOENT") {
+          // Config file doesn't exist yet - this is normal for setup command
+          // Don't log anything, just continue with defaults
+        } else {
+          // Only log if it's a different error (permissions, invalid JSON, etc.)
+          console.warn(
+            `Failed to load AI config from ${configPath}:`,
+            configError
+          );
+        }
       }
 
       // Prioritize: environment variables -> config file -> constructor config -> defaults

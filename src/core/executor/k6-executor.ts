@@ -28,7 +28,14 @@ export class K6LoadExecutor implements K6Executor {
   private logger = createLogger({ component: "K6Executor" });
 
   constructor() {
-    this.k6ScriptDir = path.join(process.cwd(), "k6-scripts");
+    const {
+      requireStressMasterDir,
+    } = require("../../utils/require-stressmaster-dir");
+    const { getK6ScriptsDir, ensureStressMasterDirs } =
+      requireStressMasterDir();
+    // Ensure all StressMaster directories exist and gitignore is set up
+    ensureStressMasterDirs();
+    this.k6ScriptDir = getK6ScriptsDir();
     this.ensureK6ScriptDir();
   }
 

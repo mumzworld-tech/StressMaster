@@ -130,6 +130,7 @@ function isCommand(arg: string): boolean {
     "history",
     "export",
     "run",
+    "setup",
     "help",
     "version",
   ];

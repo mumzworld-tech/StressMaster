@@ -311,7 +311,11 @@ class AIConfigFileSource implements ConfigSource {
   priority = 3;
 
   load(): Partial<StressMasterConfig> {
-    const configPath = join(process.cwd(), "config", "ai-config.json");
+    const {
+      requireStressMasterDir,
+    } = require("../../utils/require-stressmaster-dir");
+    const { getAIConfigPath } = requireStressMasterDir();
+    const configPath = getAIConfigPath();
 
     if (!existsSync(configPath)) {
       return {};

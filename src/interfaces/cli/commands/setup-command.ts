@@ -46,8 +46,15 @@ async function runSetup(): Promise<void> {
   // Get inquirer instance once for the entire function
   const inq = await getInquirer();
 
+  // Import StressMaster directory utility
+  const { getAIConfigPath, getConfigDir, ensureStressMasterDirs } =
+    await import("../../../utils/stressmaster-dir");
+
+  // Ensure all StressMaster directories exist
+  ensureStressMasterDirs();
+
   // Check if config already exists
-  const configPath = join(process.cwd(), "config", "ai-config.json");
+  const configPath = getAIConfigPath();
   if (existsSync(configPath)) {
     const { overwrite } = await inq.prompt([
       {
@@ -124,7 +131,10 @@ async function runSetup(): Promise<void> {
     // Step 4: Create configuration files
     await createConfigFiles(answers);
 
-    // Step 5: Show success message
+    // Step 5: Ensure git ignores StressMaster files
+    await ensureGitIgnore();
+
+    // Step 6: Show success message
     showSuccessMessage(answers);
   } catch (error) {
     console.error(
@@ -328,11 +338,15 @@ async function setupGemini(answers: SetupAnswers): Promise<void> {
 }
 
 async function createConfigFiles(answers: SetupAnswers): Promise<void> {
-  // Create config directory
-  const configDir = join(process.cwd(), "config");
-  if (!existsSync(configDir)) {
-    mkdirSync(configDir, { recursive: true });
-  }
+  // Import StressMaster directory utility
+  const { getConfigDir, getAIConfigPath, ensureStressMasterDirs } =
+    await import("../../../utils/stressmaster-dir");
+
+  // Ensure all StressMaster directories exist
+  ensureStressMasterDirs();
+
+  // Get config directory and file paths
+  const configDir = getConfigDir();
 
   // Create ai-config.json
   const aiConfig: any = {
@@ -353,7 +367,7 @@ async function createConfigFiles(answers: SetupAnswers): Promise<void> {
     aiConfig.apiKey = answers.apiKey;
   }
 
-  const configPath = join(configDir, "ai-config.json");
+  const configPath = getAIConfigPath();
   writeFileSync(configPath, JSON.stringify(aiConfig, null, 2), "utf-8");
   console.log(chalk.green(`✅ Created ${configPath}`));
 
@@ -418,6 +432,52 @@ async function createConfigFiles(answers: SetupAnswers): Promise<void> {
 
     console.log(chalk.yellow("\n⚠️  Remember to add .env to your .gitignore!"));
   }
+
+  // Ensure .stressmaster/ is in .gitignore
+  await ensureGitIgnore();
+}
+
+/**
+ * Ensure .stressmaster/ is in the project's .gitignore
+ */
+async function ensureGitIgnore(): Promise<void> {
+  const gitignorePath = join(process.cwd(), ".gitignore");
+  const stressMasterIgnore = ".stressmaster/";
+
+  try {
+    // Check if .gitignore exists
+    if (!existsSync(gitignorePath)) {
+      // Create .gitignore with StressMaster entry
+      const content = `# StressMaster Generated Files\n${stressMasterIgnore}\n`;
+      writeFileSync(gitignorePath, content, "utf-8");
+      console.log(
+        chalk.green(`✅ Created .gitignore and added ${stressMasterIgnore}`)
+      );
+      return;
+    }
+
+    // Read existing .gitignore
+    const fs = await import("fs/promises");
+    const content = await fs.readFile(gitignorePath, "utf-8");
+
+    // Check if .stressmaster/ is already in .gitignore
+    if (content.includes(stressMasterIgnore)) {
+      // Already present, nothing to do
+      return;
+    }
+
+    // Add .stressmaster/ to .gitignore
+    const newContent =
+      content.trim() +
+      "\n\n# StressMaster Generated Files\n" +
+      stressMasterIgnore +
+      "\n";
+    await fs.writeFile(gitignorePath, newContent, "utf-8");
+    console.log(chalk.green(`✅ Added ${stressMasterIgnore} to .gitignore`));
+  } catch (error) {
+    // Silently fail - .gitignore update is not critical
+    // User can manually add it if needed
+  }
 }
 
 function showSuccessMessage(answers: SetupAnswers): void {
@@ -445,6 +505,16 @@ function showSuccessMessage(answers: SetupAnswers): void {
   console.log(
     chalk.gray(
       '     stressmaster "send 10 POST requests to http://localhost:3000/api/users"'
+    )
+  );
+
+  console.log(chalk.green("\n✅ Git Configuration:"));
+  console.log(
+    chalk.gray("   • Added .stressmaster/ to your project's .gitignore")
+  );
+  console.log(
+    chalk.gray(
+      "   • All StressMaster-generated files will be automatically ignored by git"
     )
   );
 
