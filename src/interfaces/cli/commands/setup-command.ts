@@ -5,9 +5,17 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import inquirer from "inquirer";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+
+// Dynamic import for inquirer (ES Module) to avoid CommonJS warning
+let inquirer: any;
+async function getInquirer() {
+  if (!inquirer) {
+    inquirer = (await import("inquirer")).default;
+  }
+  return inquirer;
+}
 
 interface SetupAnswers {
   aiProvider: "ollama" | "openai" | "claude" | "gemini";
@@ -29,16 +37,25 @@ export function createSetupCommand(): Command {
 
 async function runSetup(): Promise<void> {
   console.log(chalk.blue.bold("\n🚀 StressMaster Setup Wizard\n"));
-  console.log(chalk.gray("This will guide you through configuring StressMaster for your project.\n"));
+  console.log(
+    chalk.gray(
+      "This will guide you through configuring StressMaster for your project.\n"
+    )
+  );
+
+  // Get inquirer instance once for the entire function
+  const inq = await getInquirer();
 
   // Check if config already exists
   const configPath = join(process.cwd(), "config", "ai-config.json");
   if (existsSync(configPath)) {
-    const { overwrite } = await inquirer.prompt([
+    const { overwrite } = await inq.prompt([
       {
         type: "confirm",
         name: "overwrite",
-        message: chalk.yellow(`Configuration already exists at ${configPath}. Overwrite?`),
+        message: chalk.yellow(
+          `Configuration already exists at ${configPath}. Overwrite?`
+        ),
         default: false,
       },
     ]);
@@ -51,7 +68,7 @@ async function runSetup(): Promise<void> {
 
   try {
     // Step 1: Choose AI Provider
-    const providerAnswer = await inquirer.prompt([
+    const providerAnswer = await inq.prompt([
       {
         type: "list",
         name: "aiProvider",
@@ -94,7 +111,7 @@ async function runSetup(): Promise<void> {
     }
 
     // Step 3: Ask about .env file
-    const envAnswer = await inquirer.prompt([
+    const envAnswer = await inq.prompt([
       {
         type: "confirm",
         name: "createEnvFile",
@@ -109,15 +126,17 @@ async function runSetup(): Promise<void> {
 
     // Step 5: Show success message
     showSuccessMessage(answers);
-
   } catch (error) {
-    console.error(chalk.red(`\n❌ Setup failed: ${(error as Error).message}\n`));
+    console.error(
+      chalk.red(`\n❌ Setup failed: ${(error as Error).message}\n`)
+    );
     process.exit(1);
   }
 }
 
 async function setupOllama(answers: SetupAnswers): Promise<void> {
-  const ollamaAnswers = await inquirer.prompt([
+  const inq = await getInquirer();
+  const ollamaAnswers = await inq.prompt([
     {
       type: "input",
       name: "endpoint",
@@ -147,7 +166,8 @@ async function setupOllama(answers: SetupAnswers): Promise<void> {
 }
 
 async function setupOpenAI(answers: SetupAnswers): Promise<void> {
-  const openAIAnswers = await inquirer.prompt([
+  const inq = await getInquirer();
+  const openAIAnswers = await inq.prompt([
     {
       type: "password",
       name: "apiKey",
@@ -165,14 +185,18 @@ async function setupOpenAI(answers: SetupAnswers): Promise<void> {
       message: "Choose a model:",
       choices: [
         { name: "GPT-4 (Best quality, higher cost)", value: "gpt-4" },
-        { name: "GPT-3.5 Turbo (Good quality, lower cost)", value: "gpt-3.5-turbo" },
+        {
+          name: "GPT-3.5 Turbo (Good quality, lower cost)",
+          value: "gpt-3.5-turbo",
+        },
         { name: "Custom model", value: "custom" },
       ],
     },
   ]);
 
   if (openAIAnswers.model === "custom") {
-    const customModel = await inquirer.prompt([
+    const inq = await getInquirer();
+    const customModel = await inq.prompt([
       {
         type: "input",
         name: "model",
@@ -186,17 +210,25 @@ async function setupOpenAI(answers: SetupAnswers): Promise<void> {
 
   answers.apiKey = openAIAnswers.apiKey;
 
-  console.log(chalk.gray("\n💡 Get your API key from: https://platform.openai.com/api-keys\n"));
+  console.log(
+    chalk.gray(
+      "\n💡 Get your API key from: https://platform.openai.com/api-keys\n"
+    )
+  );
 }
 
 async function setupClaude(answers: SetupAnswers): Promise<void> {
-  const claudeAnswers = await inquirer.prompt([
+  const inq = await getInquirer();
+  const claudeAnswers = await inq.prompt([
     {
       type: "password",
       name: "apiKey",
       message: "Anthropic API Key:",
       validate: (input: string) => {
-        if (!input || (!input.startsWith("sk-ant-") && !input.startsWith("sk-"))) {
+        if (
+          !input ||
+          (!input.startsWith("sk-ant-") && !input.startsWith("sk-"))
+        ) {
           return "Anthropic API key should start with 'sk-ant-' or 'sk-'";
         }
         return true;
@@ -207,17 +239,27 @@ async function setupClaude(answers: SetupAnswers): Promise<void> {
       name: "model",
       message: "Choose a model:",
       choices: [
-        { name: "Claude 3.5 Sonnet (Latest, recommended)", value: "claude-3-5-sonnet-20241022" },
-        { name: "Claude 3 Opus (Most capable)", value: "claude-3-opus-20240229" },
+        {
+          name: "Claude 3.5 Sonnet (Latest, recommended)",
+          value: "claude-3-5-sonnet-20241022",
+        },
+        {
+          name: "Claude 3 Opus (Most capable)",
+          value: "claude-3-opus-20240229",
+        },
         { name: "Claude 3 Sonnet", value: "claude-3-sonnet-20240229" },
-        { name: "Claude 3 Haiku (Fastest, cheapest)", value: "claude-3-haiku-20240307" },
+        {
+          name: "Claude 3 Haiku (Fastest, cheapest)",
+          value: "claude-3-haiku-20240307",
+        },
         { name: "Custom model", value: "custom" },
       ],
     },
   ]);
 
   if (claudeAnswers.model === "custom") {
-    const customModel = await inquirer.prompt([
+    const inq = await getInquirer();
+    const customModel = await inq.prompt([
       {
         type: "input",
         name: "model",
@@ -231,11 +273,14 @@ async function setupClaude(answers: SetupAnswers): Promise<void> {
 
   answers.apiKey = claudeAnswers.apiKey;
 
-  console.log(chalk.gray("\n💡 Get your API key from: https://console.anthropic.com/\n"));
+  console.log(
+    chalk.gray("\n💡 Get your API key from: https://console.anthropic.com/\n")
+  );
 }
 
 async function setupGemini(answers: SetupAnswers): Promise<void> {
-  const geminiAnswers = await inquirer.prompt([
+  const inq = await getInquirer();
+  const geminiAnswers = await inq.prompt([
     {
       type: "password",
       name: "apiKey",
@@ -260,7 +305,8 @@ async function setupGemini(answers: SetupAnswers): Promise<void> {
   ]);
 
   if (geminiAnswers.model === "custom") {
-    const customModel = await inquirer.prompt([
+    const inq = await getInquirer();
+    const customModel = await inq.prompt([
       {
         type: "input",
         name: "model",
@@ -274,7 +320,11 @@ async function setupGemini(answers: SetupAnswers): Promise<void> {
 
   answers.apiKey = geminiAnswers.apiKey;
 
-  console.log(chalk.gray("\n💡 Get your API key from: https://makersuite.google.com/app/apikey\n"));
+  console.log(
+    chalk.gray(
+      "\n💡 Get your API key from: https://makersuite.google.com/app/apikey\n"
+    )
+  );
 }
 
 async function createConfigFiles(answers: SetupAnswers): Promise<void> {
@@ -336,14 +386,17 @@ async function createConfigFiles(answers: SetupAnswers): Promise<void> {
     }
 
     const envPath = join(process.cwd(), ".env");
-    
+
     // Check if .env already exists
     if (existsSync(envPath)) {
-      const { append } = await inquirer.prompt([
+      const inq = await getInquirer();
+      const { append } = await inq.prompt([
         {
           type: "confirm",
           name: "append",
-          message: chalk.yellow(`.env file already exists. Append StressMaster config?`),
+          message: chalk.yellow(
+            `.env file already exists. Append StressMaster config?`
+          ),
           default: true,
         },
       ]);
@@ -351,7 +404,10 @@ async function createConfigFiles(answers: SetupAnswers): Promise<void> {
       if (append) {
         const fs = await import("fs/promises");
         const existingContent = await fs.readFile(envPath, "utf-8");
-        const newContent = existingContent + "\n\n# StressMaster Configuration\n" + envLines.slice(3).join("\n");
+        const newContent =
+          existingContent +
+          "\n\n# StressMaster Configuration\n" +
+          envLines.slice(3).join("\n");
         await fs.writeFile(envPath, newContent, "utf-8");
         console.log(chalk.green(`✅ Updated ${envPath}`));
       }
@@ -370,20 +426,27 @@ function showSuccessMessage(answers: SetupAnswers): void {
   console.log(chalk.blue("Next steps:"));
   console.log(chalk.white("  1. If using Ollama, make sure it's running:"));
   console.log(chalk.gray("     ollama serve"));
-  
+
   if (answers.aiProvider === "ollama" && answers.model) {
     console.log(chalk.gray(`     ollama pull ${answers.model}`));
   }
 
   console.log(chalk.white("\n  2. Test your configuration:"));
-  console.log(chalk.gray("     stressmaster \"send 5 GET requests to https://httpbin.org/get\""));
+  console.log(
+    chalk.gray(
+      '     stressmaster "send 5 GET requests to https://httpbin.org/get"'
+    )
+  );
 
   console.log(chalk.white("\n  3. Check your configuration:"));
   console.log(chalk.gray("     stressmaster config show"));
 
   console.log(chalk.white("\n  4. Start testing your APIs:"));
-  console.log(chalk.gray("     stressmaster \"send 10 POST requests to http://localhost:3000/api/users\""));
+  console.log(
+    chalk.gray(
+      '     stressmaster "send 10 POST requests to http://localhost:3000/api/users"'
+    )
+  );
 
   console.log(chalk.gray("\n📖 For more examples, see: stressmaster --help\n"));
 }
-

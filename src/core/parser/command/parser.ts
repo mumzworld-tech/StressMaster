@@ -677,15 +677,63 @@ export class UnifiedCommandParser implements CommandParser {
   }
 
   private detectOpenAPIFile(input: string): boolean {
+    // Only detect OpenAPI files if input contains explicit OpenAPI keywords
+    // Don't match every .json/.yaml file - only those explicitly mentioned as OpenAPI
     const openAPIPatterns = [
-      /@[\w\-_\/]+\.(yaml|yml|json)/i,
       /openapi/i,
       /swagger/i,
       /api\s+spec/i,
       /api\s+definition/i,
+      /@[\w\-_\/]*(openapi|swagger|api[-_]?spec|api[-_]?def)[\w\-_\/]*\.(yaml|yml|json)/i, // Filename contains OpenAPI keywords
     ];
 
     return openAPIPatterns.some((pattern) => pattern.test(input));
+  }
+
+  /**
+   * Check if a file is actually an OpenAPI specification by validating its structure
+   */
+  private async isOpenAPIFile(filePath: string): Promise<boolean> {
+    try {
+      const { FileResolver } = await import("../../../utils/file-resolver");
+      const fs = await import("fs");
+      const path = await import("path");
+      const yaml = await import("js-yaml");
+
+      const resolved = FileResolver.resolveFile(filePath);
+      if (!resolved.exists || !resolved.resolvedPath) {
+        return false;
+      }
+
+      const content = fs.readFileSync(resolved.resolvedPath, "utf8");
+      const fileExt = path.extname(resolved.resolvedPath).toLowerCase();
+
+      let parsed: any;
+      if (fileExt === ".yaml" || fileExt === ".yml") {
+        parsed = yaml.load(content);
+      } else if (fileExt === ".json") {
+        parsed = JSON.parse(content);
+      } else {
+        return false;
+      }
+
+      // Quick validation: OpenAPI files must have either:
+      // 1. openapi field (OpenAPI 3.x)
+      // 2. swagger field (Swagger/OpenAPI 2.0)
+      // 3. Both info and paths fields (minimal OpenAPI structure)
+      if (!parsed || typeof parsed !== "object") {
+        return false;
+      }
+
+      return (
+        parsed.openapi !== undefined ||
+        parsed.swagger !== undefined ||
+        (parsed.info && parsed.paths)
+      );
+    } catch (error) {
+      // If we can't read/parse the file, assume it's not OpenAPI
+      return false;
+    }
   }
 
   /**
@@ -699,6 +747,13 @@ export class UnifiedCommandParser implements CommandParser {
 
       const filePath = fileMatch[1];
 
+      // First, validate that this is actually an OpenAPI file
+      const isOpenAPI = await this.isOpenAPIFile(filePath);
+      if (!isOpenAPI) {
+        // Not an OpenAPI file, skip enhancement silently
+        return input;
+      }
+
       // Import OpenAPI parser
       const { OpenAPIParser } = await import(
         "../../../features/openapi/parser"
@@ -709,6 +764,7 @@ export class UnifiedCommandParser implements CommandParser {
       const result = await parser.parseFromFile(filePath);
 
       if (!result.success) {
+        // Only log warning if we confirmed it's supposed to be an OpenAPI file
         console.warn(`Failed to parse OpenAPI file: ${filePath}`);
         return input;
       }
@@ -718,7 +774,7 @@ export class UnifiedCommandParser implements CommandParser {
 
       return `${input}\n\nOpenAPI Context:\n${enhancedContext}`;
     } catch (error) {
-      console.warn(`Error enhancing with OpenAPI context: ${error}`);
+      // Silently fail - don't log errors for non-OpenAPI files
       return input;
     }
   }

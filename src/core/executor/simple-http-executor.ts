@@ -343,34 +343,45 @@ export class BasicHttpExecutor implements SimpleHttpExecutor {
     // Only show detailed response for first request or small tests
     if (responseNum === 1 || totalRequests <= 3) {
       console.log(chalk.magenta.bold(`📥 RESPONSE ${responseNum}:`));
+
       const statusColor = this.getStatusColor(response.status);
       const statusEmoji =
         response.status >= 200 && response.status < 300 ? "✅" : "❌";
-      console.log(
-        `   Status: ${statusColor}${response.status} ${
-          response.statusText
-        }${chalk.reset()} ${statusEmoji}`
+
+      // Format status with proper color
+      const statusText = statusColor(
+        `${response.status} ${response.statusText || ""}`
       );
 
+      console.log(`   Status: ${statusText} ${statusEmoji}`);
+
       if (response.data && typeof response.data === "object") {
-        const dataStr = JSON.stringify(response.data);
-        if (dataStr.length > 100) {
-          console.log(
-            `   Body: ${chalk.gray(dataStr.substring(0, 97) + "...")}`
-          );
+        const dataStr = JSON.stringify(response.data, null, 2);
+        if (dataStr.length > 300) {
+          const truncated = dataStr.substring(0, 297) + "...";
+          console.log(chalk.dim(`   Body:`));
+          const lines = truncated.split("\n");
+          lines.forEach((line) => {
+            console.log(chalk.gray(`      ${line}`));
+          });
         } else {
-          console.log(`   Body: ${chalk.gray(dataStr)}`);
+          // Format JSON body with proper indentation
+          console.log(chalk.dim(`   Body:`));
+          const lines = dataStr.split("\n");
+          lines.forEach((line) => {
+            console.log(chalk.gray(`      ${line}`));
+          });
         }
       }
       console.log();
     }
   }
 
-  private getStatusColor(status: number): any {
-    if (status >= 200 && status < 300) return chalk.green;
-    if (status >= 400 && status < 500) return chalk.yellow;
-    if (status >= 500) return chalk.red;
-    return chalk.gray;
+  private getStatusColor(status: number): (text: string) => string {
+    if (status >= 200 && status < 300) return chalk.green.bold;
+    if (status >= 400 && status < 500) return chalk.yellow.bold;
+    if (status >= 500) return chalk.red.bold;
+    return chalk.gray.bold;
   }
 
   private generateRequestBody(payload: any, requestIndex?: number): any {
