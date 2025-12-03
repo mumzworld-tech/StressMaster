@@ -34,6 +34,17 @@ export interface HistoryEntry {
   timestamp: Date;
   result: "success" | "error";
   executionTime: number;
+  // Enhanced fields for load test requests
+  isLoadTest?: boolean;
+  testId?: string;
+  testName?: string;
+  testType?: string;
+  status?: string;
+  metrics?: {
+    totalRequests?: number;
+    successRate?: number;
+    avgResponseTime?: number;
+  };
 }
 
 export interface SessionContext {

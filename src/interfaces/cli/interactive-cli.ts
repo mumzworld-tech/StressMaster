@@ -35,10 +35,14 @@ export class InteractiveCLI implements CLIInterface {
   private progressSubject = new Subject<ProgressUpdate>();
   private isRunning = false;
   private lastTestResult: TestResult | null = null;
+  private lastCommand: string | null = null;
 
   constructor(config: Partial<CLIConfig> = {}) {
     this.sessionManager = new SessionManager(config);
-    this.displayManager = new DisplayManager(this.sessionManager.getHistory());
+    this.displayManager = new DisplayManager(
+      this.sessionManager.getHistory(),
+      this.sessionManager.getLoadTestHistory()
+    );
     this.resultDisplay = new ResultDisplayManager();
     this.exportManager = new ExportManager();
     this.apiEnhancer = new APIEnhancer();
@@ -89,6 +93,37 @@ export class InteractiveCLI implements CLIInterface {
 
         if (input.toLowerCase() === "history") {
           this.displayManager.displayHistory();
+          continue;
+        }
+
+        if (input.toLowerCase() === "history tests" || input.toLowerCase() === "history load") {
+          this.displayManager.displayLoadTestHistory();
+          continue;
+        }
+
+        // Handle rerun commands (with various aliases)
+        const normalizedInput = input.toLowerCase().trim();
+        if (
+          normalizedInput === "rerun" ||
+          normalizedInput === "repeat" ||
+          normalizedInput === "retry" ||
+          normalizedInput === "try again" ||
+          normalizedInput === "!!"
+        ) {
+          await this.handleRerunCommand();
+          continue;
+        }
+
+        // Handle rerun with number (e.g., "rerun 3", "retry 3", "try again 3", or just "3")
+        const rerunMatch = input.match(/^(rerun|repeat|retry|try again)\s+(\d+)$/i);
+        const numberOnlyMatch = /^\d+$/.test(input.trim());
+        if (rerunMatch) {
+          const historyNumber = parseInt(rerunMatch[2], 10);
+          await this.handleRerunCommand(historyNumber);
+          continue;
+        } else if (numberOnlyMatch) {
+          const historyNumber = parseInt(input.trim(), 10);
+          await this.handleRerunCommand(historyNumber);
           continue;
         }
 
@@ -198,14 +233,39 @@ export class InteractiveCLI implements CLIInterface {
   private async executeCommand(input: string): Promise<void> {
     console.log(chalk.blue("🔄 Processing command..."));
 
-    // Add to history
+    // Store the last command for rerun functionality
+    this.lastCommand = input;
+
+    // Add to history (will be updated with load test metadata after execution)
     this.sessionManager
       .getHistory()
       .addEntry({ command: input, result: "success", executionTime: 0 });
 
     try {
       // Process the command and get results
+      // Note: processCommand will store in load test history internally
       const result = await this.processCommand(input);
+
+      // Update history entry with load test metadata
+      const history = this.sessionManager.getHistory().getHistory();
+      if (history.length > 0) {
+        const lastEntry = history[0];
+        lastEntry.isLoadTest = true;
+        lastEntry.testId = result.id;
+        lastEntry.testName = result.spec.name;
+        lastEntry.testType = result.spec.testType;
+        lastEntry.status = result.status;
+        lastEntry.executionTime = result.endTime.getTime() - result.startTime.getTime();
+        if (result.metrics) {
+          lastEntry.metrics = {
+            totalRequests: result.metrics.totalRequests,
+            successRate: result.metrics.successfulRequests 
+              ? result.metrics.successfulRequests / result.metrics.totalRequests 
+              : undefined,
+            avgResponseTime: result.metrics.responseTime?.avg,
+          };
+        }
+      }
 
       // Add to session history
       this.sessionManager.addTestToHistory(result);
@@ -217,12 +277,71 @@ export class InteractiveCLI implements CLIInterface {
       // Display the full results with all visualizations
       this.resultDisplay.displayResults(result);
     } catch (error) {
+      // Update history entry to mark as error
+      const history = this.sessionManager.getHistory().getHistory();
+      if (history.length > 0) {
+        history[0].result = "error";
+      }
+      
       this.displayManager.displayError(
         `Failed to execute command: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
     }
+  }
+
+  /**
+   * Handle rerun command - rerun the last command or a specific history entry
+   */
+  private async handleRerunCommand(historyNumber?: number): Promise<void> {
+    const history = this.sessionManager.getHistory().getHistory();
+
+    let commandToRerun: string | null = null;
+
+    if (historyNumber !== undefined) {
+      // Rerun specific history entry by number
+      if (historyNumber < 1 || historyNumber > history.length) {
+        console.log(
+          chalk.red(
+            `❌ Invalid history number. Please use a number between 1 and ${history.length}`
+          )
+        );
+        console.log(
+          chalk.gray("💡 Use 'history' to see available commands")
+        );
+        return;
+      }
+
+      const entry = history[historyNumber - 1]; // History is 1-indexed for users
+      commandToRerun = entry.command;
+      console.log(
+        chalk.blue(`🔄 Rerunning command #${historyNumber}: ${chalk.cyan(commandToRerun)}`)
+      );
+    } else {
+      // Rerun last command
+      if (!this.lastCommand && history.length === 0) {
+        console.log(chalk.yellow("⚠️  No previous command to rerun."));
+        console.log(
+          chalk.gray("💡 Run a command first, or use 'rerun <number>' to rerun a specific history entry")
+        );
+        return;
+      }
+
+      commandToRerun = this.lastCommand || (history.length > 0 ? history[0].command : null);
+      
+      if (!commandToRerun) {
+        console.log(chalk.yellow("⚠️  No previous command to rerun."));
+        return;
+      }
+
+      console.log(
+        chalk.blue(`🔄 Rerunning last command: ${chalk.cyan(commandToRerun)}`)
+      );
+    }
+
+    console.log(); // Empty line for spacing
+    await this.executeCommand(commandToRerun);
   }
 
   async shutdown(): Promise<void> {
@@ -424,6 +543,32 @@ export class InteractiveCLI implements CLIInterface {
 
       console.log(chalk.blue("🌐 Sending HTTP requests..."));
       const result = await executor.executeLoadTest(spec);
+
+      // Store in load test history
+      try {
+        // Get provider name from parser's AI provider
+        const providerName = (parser as any).aiProvider?.getProviderName?.() || undefined;
+        
+        this.sessionManager.getLoadTestHistory().addEntry(
+          normalizedInput,
+          spec,
+          result,
+          {
+            provider: providerName,
+            model: undefined, // Could be extracted from parser config if available
+            confidence: undefined, // Could be extracted from parse result if available
+          }
+        );
+      } catch (historyError) {
+        // Don't fail the command if history storage fails
+        if (this.sessionManager.getConfig().verbose) {
+          console.warn(
+            chalk.yellow(
+              `Warning: Could not save to load test history: ${historyError}`
+            )
+          );
+        }
+      }
 
       return result;
     } catch (error) {
