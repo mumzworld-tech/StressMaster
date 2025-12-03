@@ -47,8 +47,8 @@ describe("Unified Configuration System", () => {
     });
 
     it("should have reasonable default values", () => {
-      expect(DEFAULT_AI_CONFIG.provider).toBe("ollama");
-      expect(DEFAULT_AI_CONFIG.model).toBe("llama3.2:1b");
+      expect(DEFAULT_AI_CONFIG.provider).toBe("claude");
+      expect(DEFAULT_AI_CONFIG.model).toBe("claude-3-5-sonnet-20241022");
       expect(DEFAULT_AI_CONFIG.maxRetries).toBe(3);
       expect(DEFAULT_AI_CONFIG.timeout).toBe(30000);
 

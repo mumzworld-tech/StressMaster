@@ -1230,9 +1230,9 @@ export class InteractiveCLI implements CLIInterface {
       }
     }
 
-    // Default
+    // Default (safe cloud provider)
     return {
-      provider: "ollama",
+      provider: "claude",
       source: "default",
     };
   }

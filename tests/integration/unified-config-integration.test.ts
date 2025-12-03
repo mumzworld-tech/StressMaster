@@ -102,7 +102,7 @@ describe("Unified Configuration Integration", () => {
   it("should create test configurations properly", () => {
     const testConfig = createTestConfig({
       ai: {
-        provider: "ollama",
+        provider: "claude",
         model: "test-model",
       },
       logging: {
@@ -111,7 +111,7 @@ describe("Unified Configuration Integration", () => {
     });
 
     expect(testConfig.application.nodeEnv).toBe("test");
-    expect(testConfig.ai.provider).toBe("ollama");
+    expect(testConfig.ai.provider).toBe("claude");
     expect(testConfig.ai.model).toBe("test-model");
     expect(testConfig.ai.timeout).toBe(5000); // Test default
     expect(testConfig.logging.level).toBe("debug"); // Override

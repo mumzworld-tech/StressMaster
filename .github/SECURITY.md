@@ -30,4 +30,3 @@ When using StressMaster:
 - File resolution searches project directory - ensure sensitive files are not in project root
 - AI provider API keys should be stored securely (environment variables, not in code)
 - Generated K6 scripts execute with system permissions - review before running
-

@@ -17,7 +17,7 @@ export interface ParserConfig {
   modelName?: string;
   maxRetries?: number;
   timeout?: number;
-  aiProvider?: "ollama" | "openai" | "claude" | "gemini";
+  aiProvider?: "openai" | "claude" | "gemini" | "openrouter" | "amazonq";
   apiKey?: string;
 }
 

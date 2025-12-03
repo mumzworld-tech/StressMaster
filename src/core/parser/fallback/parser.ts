@@ -271,7 +271,7 @@ export class FallbackParser {
       try {
         // Use centralized file resolver (resolves from root directory)
         // Note: Using sync version since this method is not async
-        const { FileResolver } = require("../../utils/file-resolver");
+        const { FileResolver } = require("../../../utils/file-resolver");
         const fileContent = FileResolver.resolveFileSync(`@${fileMatch}`);
         
         console.log(`📁 Loaded JSON from file: ${fileMatch}`);

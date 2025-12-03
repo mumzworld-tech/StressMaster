@@ -18,7 +18,7 @@ async function getInquirer() {
 }
 
 interface SetupAnswers {
-  aiProvider: "ollama" | "openai" | "claude" | "gemini";
+  aiProvider: "openai" | "claude" | "gemini" | "openrouter" | "amazonq";
   apiKey?: string;
   model?: string;
   endpoint?: string;
@@ -82,16 +82,20 @@ async function runSetup(): Promise<void> {
         message: "Which AI provider would you like to use?",
         choices: [
           {
-            name: "Ollama (Local, Free) - Recommended for beginners",
-            value: "ollama",
+            name: "Claude (Anthropic or via OpenRouter) - Recommended",
+            value: "claude",
           },
           {
             name: "OpenAI (GPT-3.5, GPT-4) - Paid, high quality",
             value: "openai",
           },
           {
-            name: "Claude (Anthropic) - Paid, excellent reasoning",
-            value: "claude",
+            name: "OpenRouter - Access multiple AI models through one API",
+            value: "openrouter",
+          },
+          {
+            name: "Amazon Q - Amazon Q Developer AI models",
+            value: "amazonq",
           },
           {
             name: "Google Gemini - Paid, competitive pricing",
@@ -107,12 +111,14 @@ async function runSetup(): Promise<void> {
     };
 
     // Step 2: Provider-specific configuration
-    if (answers.aiProvider === "ollama") {
-      await setupOllama(answers);
-    } else if (answers.aiProvider === "openai") {
+    if (answers.aiProvider === "openai") {
       await setupOpenAI(answers);
     } else if (answers.aiProvider === "claude") {
       await setupClaude(answers);
+    } else if (answers.aiProvider === "openrouter") {
+      await setupOpenRouter(answers);
+    } else if (answers.aiProvider === "amazonq") {
+      await setupAmazonQ(answers);
     } else if (answers.aiProvider === "gemini") {
       await setupGemini(answers);
     }
@@ -142,37 +148,6 @@ async function runSetup(): Promise<void> {
     );
     process.exit(1);
   }
-}
-
-async function setupOllama(answers: SetupAnswers): Promise<void> {
-  const inq = await getInquirer();
-  const ollamaAnswers = await inq.prompt([
-    {
-      type: "input",
-      name: "endpoint",
-      message: "Ollama endpoint:",
-      default: "http://localhost:11434",
-      validate: (input: string) => {
-        if (!input.startsWith("http://") && !input.startsWith("https://")) {
-          return "Endpoint must start with http:// or https://";
-        }
-        return true;
-      },
-    },
-    {
-      type: "input",
-      name: "model",
-      message: "Model name:",
-      default: "llama3.2:1b",
-    },
-  ]);
-
-  answers.endpoint = ollamaAnswers.endpoint;
-  answers.model = ollamaAnswers.model;
-
-  console.log(chalk.gray("\n💡 Make sure Ollama is running:"));
-  console.log(chalk.gray("   ollama serve"));
-  console.log(chalk.gray(`   ollama pull ${ollamaAnswers.model}\n`));
 }
 
 async function setupOpenAI(answers: SetupAnswers): Promise<void> {
@@ -288,6 +263,120 @@ async function setupClaude(answers: SetupAnswers): Promise<void> {
   );
 }
 
+async function setupOpenRouter(answers: SetupAnswers): Promise<void> {
+  const inq = await getInquirer();
+  const openRouterAnswers = await inq.prompt([
+    {
+      type: "password",
+      name: "apiKey",
+      message: "OpenRouter API Key:",
+      validate: (input: string) => {
+        if (!input || !input.startsWith("sk-or-")) {
+          return "OpenRouter API key should start with 'sk-or-'";
+        }
+        return true;
+      },
+    },
+    {
+      type: "list",
+      name: "model",
+      message: "Choose a model:",
+      choices: [
+        {
+          name: "Claude 3.5 Sonnet via OpenRouter (Recommended)",
+          value: "anthropic/claude-3.5-sonnet",
+        },
+        {
+          name: "GPT-4 via OpenRouter",
+          value: "openai/gpt-4",
+        },
+        {
+          name: "GPT-3.5 Turbo via OpenRouter",
+          value: "openai/gpt-3.5-turbo",
+        },
+        {
+          name: "Gemini Pro via OpenRouter",
+          value: "google/gemini-pro",
+        },
+        { name: "Custom model", value: "custom" },
+      ],
+    },
+  ]);
+
+  if (openRouterAnswers.model === "custom") {
+    const inq = await getInquirer();
+    const customModel = await inq.prompt([
+      {
+        type: "input",
+        name: "model",
+        message: "Enter custom model name (e.g., anthropic/claude-3-opus):",
+      },
+    ]);
+    answers.model = customModel.model;
+  } else {
+    answers.model = openRouterAnswers.model;
+  }
+
+  answers.apiKey = openRouterAnswers.apiKey;
+
+  console.log(
+    chalk.gray(
+      "\n💡 Get your API key from: https://openrouter.ai/keys\n"
+    )
+  );
+}
+
+async function setupAmazonQ(answers: SetupAnswers): Promise<void> {
+  const inq = await getInquirer();
+  const amazonQAnswers = await inq.prompt([
+    {
+      type: "password",
+      name: "apiKey",
+      message: "Amazon Q API Key:",
+      validate: (input: string) => {
+        if (!input || input.length < 20) {
+          return "Please enter a valid Amazon Q API key";
+        }
+        return true;
+      },
+    },
+    {
+      type: "list",
+      name: "model",
+      message: "Choose a model:",
+      choices: [
+        {
+          name: "Amazon Q Developer (Default)",
+          value: "amazon.q-developer",
+        },
+        { name: "Custom model", value: "custom" },
+      ],
+    },
+  ]);
+
+  if (amazonQAnswers.model === "custom") {
+    const inq = await getInquirer();
+    const customModel = await inq.prompt([
+      {
+        type: "input",
+        name: "model",
+        message: "Enter custom Amazon Q model name:",
+      },
+    ]);
+    answers.model = customModel.model;
+  } else {
+    answers.model = amazonQAnswers.model;
+  }
+
+  answers.apiKey = amazonQAnswers.apiKey;
+
+  console.log(
+    chalk.gray(
+      "\n💡 Get your API key from: https://aws.amazon.com/q/developer/\n"
+    )
+  );
+}
+
 async function setupGemini(answers: SetupAnswers): Promise<void> {
   const inq = await getInquirer();
   const geminiAnswers = await inq.prompt([
@@ -393,6 +482,10 @@ async function createConfigFiles(answers: SetupAnswers): Promise<void> {
         envLines.push(`OPENAI_API_KEY=${answers.apiKey}`);
       } else if (answers.aiProvider === "claude") {
         envLines.push(`ANTHROPIC_API_KEY=${answers.apiKey}`);
+      } else if (answers.aiProvider === "openrouter") {
+        envLines.push(`OPENROUTER_API_KEY=${answers.apiKey}`);
+      } else if (answers.aiProvider === "amazonq") {
+        envLines.push(`AMAZON_Q_API_KEY=${answers.apiKey}`);
       } else if (answers.aiProvider === "gemini") {
         envLines.push(`GEMINI_API_KEY=${answers.apiKey}`);
       }
@@ -484,24 +577,17 @@ function showSuccessMessage(answers: SetupAnswers): void {
   console.log(chalk.green.bold("\n✅ Setup Complete!\n"));
 
   console.log(chalk.blue("Next steps:"));
-  console.log(chalk.white("  1. If using Ollama, make sure it's running:"));
-  console.log(chalk.gray("     ollama serve"));
-
-  if (answers.aiProvider === "ollama" && answers.model) {
-    console.log(chalk.gray(`     ollama pull ${answers.model}`));
-  }
-
-  console.log(chalk.white("\n  2. Test your configuration:"));
+  console.log(chalk.white("  1. Test your configuration:"));
   console.log(
     chalk.gray(
       '     stressmaster "send 5 GET requests to https://httpbin.org/get"'
     )
   );
 
-  console.log(chalk.white("\n  3. Check your configuration:"));
+  console.log(chalk.white("\n  2. Check your configuration:"));
   console.log(chalk.gray("     stressmaster config show"));
 
-  console.log(chalk.white("\n  4. Start testing your APIs:"));
+  console.log(chalk.white("\n  3. Start testing your APIs:"));
   console.log(
     chalk.gray(
       '     stressmaster "send 10 POST requests to http://localhost:3000/api/users"'

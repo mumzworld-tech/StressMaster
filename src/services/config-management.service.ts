@@ -114,7 +114,7 @@ export class ConfigManagementService {
       rootDirectory: process.cwd(),
       defaultDuration: 60,
       defaultVirtualUsers: 1,
-      aiProvider: "ollama",
+      aiProvider: "claude",
       cacheEnabled: true,
       verbose: false,
       outputFormat: "json",
@@ -174,7 +174,27 @@ export class ConfigManagementService {
           );
         }
         break;
+
+      case "aiProvider":
+        if (typeof value !== "string") {
+          throw new StressMasterError(
+            `aiProvider must be a string`,
+            ErrorCodes.CONFIG_INVALID,
+            { key, value }
+          );
+        }
+        // Basic validation against known providers to prevent typos
+        const allowedProviders = ["openai", "claude", "gemini", "openrouter", "amazonq"];
+        if (!allowedProviders.includes(value)) {
+          throw new StressMasterError(
+            `aiProvider must be one of: ${allowedProviders.join(", ")}`,
+            ErrorCodes.CONFIG_INVALID,
+            { key, value, allowedProviders }
+          );
+        }
+        break;
     }
   }
 }
+
 

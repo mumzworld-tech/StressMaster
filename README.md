@@ -6,16 +6,14 @@ A local-first AI-powered load testing tool that accepts natural language command
 
 StressMaster supports multiple AI providers for natural language parsing:
 
-- **Ollama** (Local, Free) - LLaMA3, Mistral, CodeLlama, and other local models
-- **OpenAI** - GPT-3.5, GPT-4, and other OpenAI models
 - **Claude** - Claude 3 models via direct API or OpenRouter
 - **OpenRouter** - Access to multiple AI models through OpenRouter
+- **OpenAI** - GPT-3.5, GPT-4, and other OpenAI models
 - **Google Gemini** - Gemini Pro and other Google AI models
 
 ## 🚀 Features
 
 - **Natural Language Interface**: Describe load tests in plain English
-- **Local AI Processing**: Uses LLaMA3 model running locally via Ollama
 - **Multiple Test Types**: Spike, stress, endurance, volume, and baseline testing
 - **K6 Integration**: Generates and executes K6 scripts automatically
 - **Real-time Monitoring**: Live progress tracking and metrics
@@ -184,7 +182,7 @@ This wizard will:
 StressMaster loads configuration in this priority order:
 
 1. **Environment Variables** (highest priority)
-2. **Config File** (`config/ai-config.json` in your project)
+2. **Config File** (`.stressmaster/config/ai-config.json` in your project)
 3. **package.json** (in a `stressmaster` section)
 4. **Defaults** (lowest priority)
 
@@ -201,12 +199,7 @@ AI_MODEL=claude-3-5-sonnet-20241022
 # Or for OpenAI
 AI_PROVIDER=openai
 OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-3.5-turbo
-
-# Or for Ollama
-AI_PROVIDER=ollama
-AI_ENDPOINT=http://localhost:11434
-AI_MODEL=llama3.2:1b
+AI_MODEL=gpt-3.5-turbo
 ```
 
 Then load it (if you're using a tool like `dotenv`):
@@ -218,18 +211,19 @@ export $(cat .env | xargs)
 
 #### Method 2: Config File
 
-Create `config/ai-config.json` in your project directory:
+Create `.stressmaster/config/ai-config.json` in your project directory:
 
 ```bash
 # Your project structure:
 your-project/
-├── config/
-│   └── ai-config.json    # ← Create this file
-├── .env                   # ← Or use this for env vars
+├── .stressmaster/
+│   └── config/
+│       └── ai-config.json    # ← Created by StressMaster or setup/switch scripts
+├── .env                      # ← Or use this for env vars
 └── package.json
 ```
 
-**File location:** `config/ai-config.json` in your project directory (where you run `stressmaster`)
+**File location:** `.stressmaster/config/ai-config.json` in your project directory (where you run `stressmaster`)
 
 #### Method 3: package.json
 
@@ -253,9 +247,6 @@ StressMaster automatically creates a configuration file on first use. You can sw
 #### Quick Provider Switching:
 
 ```bash
-# Switch to Ollama (local, free)
-sm-ollama
-
 # Switch to Claude via OpenRouter
 sm-claude-openrouter
 
@@ -274,13 +265,13 @@ sm-gemini
 
 #### Manual Configuration:
 
-The AI configuration is stored in `config/ai-config.json` (automatically created on first use):
+The AI configuration is stored in `.stressmaster/config/ai-config.json` (automatically created on first use):
 
 ```json
 {
-  "provider": "ollama",
-  "model": "llama3.2:1b",
-  "endpoint": "http://localhost:11434",
+  "provider": "claude",
+  "model": "claude-3-5-sonnet-20241022",
+  "endpoint": "https://api.anthropic.com/v1",
   "maxRetries": 3,
   "timeout": 30000,
   "options": {
@@ -291,7 +282,6 @@ The AI configuration is stored in `config/ai-config.json` (automatically created
 
 #### Provider Setup:
 
-- **Ollama**: Install Ollama and run `ollama serve`, then `ollama pull llama3.2:1b`
 - **OpenAI**: Get API key from OpenAI and use `sm-openai`
 - **Claude**: Get API key from Anthropic and use `sm-claude`
 - **OpenRouter**: Get API key from OpenRouter and use `sm-claude-openrouter` or `sm-openrouter`
@@ -413,61 +403,13 @@ When you run `stressmaster` without arguments, you enter interactive mode where 
 
 StressMaster supports multiple AI model configurations. Choose the setup that best fits your needs:
 
-### Option 1: Local Ollama (Recommended)
+### Option 1: Claude / OpenRouter (Recommended)
 
-**Advantages**: No API costs, completely private, works offline
-
-#### Setup Steps:
-
-1. **Install Ollama** (if not using Docker):
-
-   ```bash
-   # macOS/Linux
-   curl -fsSL https://ollama.ai/install.sh | sh
-
-   # Windows
-   # Download from https://ollama.ai/download
-   ```
-
-2. **Pull the LLaMA3 Model**:
-
-   ```bash
-   # Pull the recommended model
-   ollama pull llama3.2:1b
-
-   # Or try other models
-   ollama pull llama3:latest
-   ollama pull llama3.1:8b
-   ```
-
-3. **Configure StressMaster**:
-
-   ```bash
-   # Edit your .env file
-   AI_PROVIDER=ollama
-   OLLAMA_ENDPOINT=http://localhost:11434
-   MODEL_NAME=llama3.2:1b
-   ```
-
-4. **Start Ollama**:
-
-   ```bash
-   # Start Ollama service
-   ollama serve
-
-   # In another terminal, verify it's working
-   ollama list
-   ```
+Use Anthropic Claude directly or via OpenRouter for reliable, high-quality parsing.
 
 #### Docker Setup (Alternative):
 
-```bash
-# Start Ollama in Docker
-docker run -d --name ollama -p 11434:11434 -v ollama_data:/root/.ollama ollama/ollama
-
-# Pull model
-docker exec -it ollama ollama pull llama3.2:1b
-```
+You can also run StressMaster and its dependencies via Docker Compose (see `docker-compose.yml`), but AI providers are expected to be cloud-hosted (Claude, OpenRouter, OpenAI, Gemini) rather than local Ollama.
 
 ### Option 2: OpenAI API
 
@@ -540,63 +482,18 @@ docker exec -it ollama ollama pull llama3.2:1b
 
 ### Configuration File
 
-Create or edit `config/ai-config.json`:
-
-```json
-{
-  "provider": "ollama",
-  "ollama": {
-    "endpoint": "http://localhost:11434",
-    "model": "llama3.2:1b"
-  },
-  "openai": {
-    "apiKey": "your-openai-key",
-    "model": "gpt-4",
-    "maxTokens": 2000
-  },
-  "anthropic": {
-    "apiKey": "your-anthropic-key",
-    "model": "claude-3-sonnet-20240229",
-    "maxTokens": 2000
-  },
-  "gemini": {
-    "apiKey": "your-gemini-key",
-    "model": "gemini-pro",
-    "maxTokens": 2000
-  }
-}
-```
+See `.stressmaster/config/ai-config.json` and `config/ai-config.example.json` for up-to-date examples of configuring Claude, OpenRouter, OpenAI, or Gemini.
 
 ### Model Comparison
 
 | Provider  | Model           | Cost              | Performance | Setup Complexity |
 | --------- | --------------- | ----------------- | ----------- | ---------------- |
-| Ollama    | LLaMA3.2:1b     | Free              | Good        | Medium           |
-| Ollama    | LLaMA3.1:8b     | Free              | Better      | Medium           |
 | OpenAI    | GPT-3.5-turbo   | $0.0015/1K tokens | Excellent   | Easy             |
 | OpenAI    | GPT-4           | $0.03/1K tokens   | Best        | Easy             |
 | Anthropic | Claude 3 Sonnet | $0.003/1K tokens  | Excellent   | Easy             |
 | Google    | Gemini Pro      | $0.0005/1K tokens | Good        | Easy             |
 
 ### Troubleshooting AI Setup
-
-#### Ollama Issues:
-
-```bash
-# Check if Ollama is running
-curl http://localhost:11434/api/tags
-
-# Restart Ollama
-sudo systemctl restart ollama
-# or
-ollama serve
-
-# Check model availability
-ollama list
-
-# Pull model if missing
-ollama pull llama3.2:1b
-```
 
 #### API Key Issues:
 
@@ -611,18 +508,6 @@ curl -H "x-api-key: your-key" \
 
 # Test Gemini
 curl "https://generativelanguage.googleapis.com/v1beta/models?key=your-key"
-```
-
-#### Performance Optimization:
-
-```bash
-# For Ollama - increase memory
-export OLLAMA_HOST=0.0.0.0
-export OLLAMA_ORIGINS=*
-export OLLAMA_MODELS=/path/to/models
-
-# For better performance with local models
-ollama run llama3.2:1b --gpu
 ```
 
 ## 💡 Usage Examples
@@ -710,9 +595,8 @@ NODE_ENV=production
 APP_PORT=3000
 
 # AI Provider settings
-AI_PROVIDER=ollama
-OLLAMA_PORT=11434
-MODEL_NAME=llama3.2:1b
+AI_PROVIDER=claude
+AI_MODEL=claude-3-5-sonnet-20241022
 
 # API Keys (if using cloud providers)
 OPENAI_API_KEY=your-openai-key
@@ -720,7 +604,6 @@ ANTHROPIC_API_KEY=your-anthropic-key
 GEMINI_API_KEY=your-gemini-key
 
 # Resource limits
-OLLAMA_MEMORY_LIMIT=4g
 APP_MEMORY_LIMIT=1g
 K6_MEMORY_LIMIT=2g
 ```
@@ -860,23 +743,9 @@ docker-compose logs -f
 
 # Filter specific service logs
 docker-compose logs -f stressmaster
-docker-compose logs -f ollama
 ```
 
 ### Common Issues and Solutions
-
-#### AI Model Not Responding
-
-```bash
-# Check Ollama service
-docker-compose logs ollama
-
-# Restart Ollama
-docker-compose restart ollama
-
-# Reinitialize model
-docker-compose --profile init up model-init
-```
 
 #### High Memory Usage
 
@@ -885,7 +754,6 @@ docker-compose --profile init up model-init
 docker stats
 
 # Reduce memory limits
-echo "OLLAMA_MEMORY_LIMIT=2g" >> .env
 docker-compose restart
 ```
 

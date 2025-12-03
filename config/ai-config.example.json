@@ -2,9 +2,9 @@
   "_comment": "Example AI configuration file. Copy this to ai-config.json and update with your settings.",
   "_comment2": "This file is safe to commit to git as it contains no real API keys.",
 
-  "provider": "ollama",
-  "model": "llama3.2:1b",
-  "endpoint": "http://localhost:11434",
+  "provider": "claude",
+  "model": "claude-3-5-sonnet-20241022",
+  "endpoint": "https://api.anthropic.com/v1",
   "maxRetries": 3,
   "timeout": 30000,
   "options": {
@@ -13,13 +13,6 @@
   },
 
   "_examples": {
-    "ollama": {
-      "_comment": "Local AI models (free, requires Ollama installation)",
-      "provider": "ollama",
-      "model": "llama3.2:1b",
-      "endpoint": "http://localhost:11434"
-    },
-
     "openai": {
       "_comment": "OpenAI GPT models (requires OpenAI API key)",
       "provider": "openai",
@@ -60,7 +53,7 @@
     "1. Copy this file to ai-config.json",
     "2. Choose your preferred AI provider",
     "3. Update the configuration with your API keys",
-    "4. Or use the switch commands: sm-ollama, sm-claude, sm-openai, etc.",
+    "4. Or use the switch commands: sm-claude, sm-openai, sm-gemini, sm-openrouter, etc.",
     "5. Test with: stressmaster 'GET 3 requests to https://httpbin.org/get'"
   ]
 }

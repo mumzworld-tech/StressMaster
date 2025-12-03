@@ -50,10 +50,6 @@ AI_MODEL=claude-3-5-sonnet-20241022
 # OPENAI_API_KEY=sk-your-openai-key-here
 # AI_MODEL=gpt-3.5-turbo
 
-# OR for Ollama (Local, Free)
-# AI_PROVIDER=ollama
-# AI_ENDPOINT=http://localhost:11434
-# AI_MODEL=llama3.2:1b
 
 # OR for Google Gemini
 # AI_PROVIDER=gemini
@@ -148,7 +144,7 @@ your-test-project/
 
 ```json
 {
-  "provider": "ollama",
+  "provider": "claude",
   "model": "llama3.2:1b",
   "endpoint": "http://localhost:11434"
 }
@@ -277,10 +273,9 @@ stressmaster "send 10 POST requests to http://localhost:3000/api/users with JSON
 
 ### Ollama (Local - Free)
 
-1. Install Ollama: https://ollama.ai/
-2. Run: `ollama serve`
-3. Pull a model: `ollama pull llama3.2:1b`
-4. Use endpoint: `http://localhost:11434`
+1. Get an Anthropic Claude or OpenRouter API key
+2. Set `AI_PROVIDER=claude` and `AI_API_KEY=your-key` in `.env`
+3. Use endpoint: `http://localhost:11434`
 
 ### Google Gemini
 
@@ -372,7 +367,7 @@ export OPENAI_API_KEY=your-key
 export AI_MODEL=gpt-3.5-turbo
 
 # Ollama
-export AI_PROVIDER=ollama
+export AI_PROVIDER=claude
 export AI_ENDPOINT=http://localhost:11434
 export AI_MODEL=llama3.2:1b
 ```

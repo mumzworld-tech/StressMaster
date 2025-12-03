@@ -303,4 +303,7 @@ secrets/
 # Node.js specific
 .npmrc
 .yarnrc
-.yarnrc.yml 
+.yarnrc.yml
+
+# StressMaster Generated Files
+.stressmaster/

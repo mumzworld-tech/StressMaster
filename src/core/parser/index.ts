@@ -66,11 +66,11 @@ export {
   AIProvider,
   SmartAIProvider,
   BaseAIProvider,
-  OllamaProvider,
   OpenAIProvider,
   ClaudeProvider,
   GeminiProvider,
-  OllamaClient,
+  OpenRouterProvider,
+  AmazonQProvider,
   AIProviderFactory,
   createProvider,
   isSmartProvider,
@@ -84,7 +84,6 @@ export type {
   AIProviderConfig,
   CompletionRequest,
   CompletionResponse,
-  OllamaRequest,
   SmartParseResponse,
   ParseContext,
 } from "./ai-providers";
@@ -146,9 +145,8 @@ export function createUnifiedParser(
 export function createDefaultParser(): import("./command/parser").UnifiedCommandParser {
   const { UnifiedCommandParser } = require("./command/parser");
   return new UnifiedCommandParser({
-    aiProvider: "ollama",
-    modelName: "llama3.2",
-    ollamaEndpoint: "http://localhost:11434",
+    aiProvider: "claude",
+    modelName: "claude-3-5-sonnet-20241022",
     maxRetries: 3,
     timeout: 30000,
   });
@@ -156,13 +154,6 @@ export function createDefaultParser(): import("./command/parser").UnifiedCommand
 
 // Parser configuration presets
 export const ParserPresets = {
-  ollama: {
-    aiProvider: "ollama" as const,
-    modelName: "llama3.2",
-    ollamaEndpoint: "http://localhost:11434",
-    maxRetries: 3,
-    timeout: 30000,
-  },
   openai: {
     aiProvider: "openai" as const,
     modelName: "gpt-3.5-turbo",
@@ -228,9 +219,8 @@ export function migrateFromOldParser(
   oldConfig: any
 ): import("./types").ParserConfig {
   return {
-    aiProvider: "ollama",
-    modelName: oldConfig.modelName || "llama3.2",
-    ollamaEndpoint: oldConfig.ollamaEndpoint || "http://localhost:11434",
+    aiProvider: "claude",
+    modelName: oldConfig.modelName || "claude-3-5-sonnet-20241022",
     maxRetries: oldConfig.maxRetries || 3,
     timeout: oldConfig.timeout || 30000,
   };
@@ -240,9 +230,8 @@ export function migrateFromUniversalParser(
   oldConfig: any
 ): import("./types").ParserConfig {
   return {
-    aiProvider: oldConfig.provider || "ollama",
-    modelName: oldConfig.model || "llama3.2",
-    ollamaEndpoint: oldConfig.endpoint || "http://localhost:11434",
+    aiProvider: oldConfig.provider || "claude",
+    modelName: oldConfig.model || "claude-3-5-sonnet-20241022",
     apiKey: oldConfig.apiKey,
     maxRetries: oldConfig.maxRetries || 3,
     timeout: oldConfig.timeout || 30000,

@@ -92,26 +92,27 @@ export class UnifiedCommandParser implements CommandParser {
       // Prioritize: environment variables -> config file -> constructor config -> defaults
       const aiConfig: AIConfig = {
         provider:
-          process.env.AI_PROVIDER ||
+          (process.env.AI_PROVIDER as AIConfig["provider"]) ||
           aiConfigFromFile.provider ||
-          this.config.aiProvider ||
-          "ollama",
+          (this.config.aiProvider as AIConfig["provider"]) ||
+          "claude",
         model:
           process.env.AI_MODEL ||
           aiConfigFromFile.model ||
           this.config.modelName ||
-          "llama3.2:1b",
+          "claude-3-5-sonnet-20241022",
         apiKey:
           process.env.AI_API_KEY ||
           process.env.ANTHROPIC_API_KEY ||
           process.env.OPENAI_API_KEY ||
+          process.env.OPENROUTER_API_KEY ||
+          process.env.AMAZON_Q_API_KEY ||
           aiConfigFromFile.apiKey ||
           this.config.apiKey,
         endpoint:
           process.env.AI_ENDPOINT ||
           aiConfigFromFile.endpoint ||
-          this.config.ollamaEndpoint ||
-          "http://localhost:11434",
+          this.config.ollamaEndpoint,
         maxRetries: aiConfigFromFile.maxRetries || this.config.maxRetries || 3,
         timeout: aiConfigFromFile.timeout || this.config.timeout || 30000,
         options: aiConfigFromFile.options || {},

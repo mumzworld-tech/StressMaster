@@ -14,7 +14,7 @@ import { ParserConfig, DEFAULT_PARSER_CONFIG } from "../core/parser/config";
 // ============================================================================
 
 export interface AIProviderConfig {
-  provider: "ollama" | "openai" | "claude" | "gemini";
+  provider: "openai" | "claude" | "gemini" | "openrouter" | "amazonq";
   apiKey?: string;
   endpoint?: string;
   model: string;
@@ -93,9 +93,9 @@ export interface StressMasterConfig {
 // ============================================================================
 
 export const DEFAULT_AI_CONFIG: AIProviderConfig = {
-  provider: "ollama",
-  endpoint: "http://localhost:11434",
-  model: "llama3.2:1b",
+  provider: "claude",
+  endpoint: "https://api.anthropic.com/v1",
+  model: "claude-3-5-sonnet-20241022",
   maxRetries: 3,
   timeout: 30000,
   options: {
@@ -208,16 +208,24 @@ class EnvironmentConfigSource implements ConfigSource {
     // AI configuration - only set values that are explicitly provided
     const aiOverrides: Partial<AIProviderConfig> = {};
 
-    if (process.env.MODEL_NAME) {
-      aiOverrides.model = process.env.MODEL_NAME;
+    if (process.env.AI_MODEL) {
+      aiOverrides.model = process.env.AI_MODEL;
     }
 
-    if (process.env.OLLAMA_HOST && process.env.OLLAMA_PORT) {
-      aiOverrides.endpoint = `http://${process.env.OLLAMA_HOST}:${process.env.OLLAMA_PORT}`;
+    if (process.env.AI_ENDPOINT) {
+      aiOverrides.endpoint = process.env.AI_ENDPOINT;
+    }
+
+    if (process.env.AI_PROVIDER) {
+      aiOverrides.provider = process.env
+        .AI_PROVIDER as AIProviderConfig["provider"];
     }
 
     if (Object.keys(aiOverrides).length > 0) {
-      config.ai = aiOverrides;
+      config.ai = {
+        ...(config.ai || DEFAULT_AI_CONFIG),
+        ...aiOverrides,
+      };
     }
 
     // Execution configuration
@@ -232,11 +240,6 @@ class EnvironmentConfigSource implements ConfigSource {
 
       if (process.env.K6_MEMORY_LIMIT) {
         config.execution.k6.memoryLimit = process.env.K6_MEMORY_LIMIT;
-      }
-
-      if (process.env.OLLAMA_MEMORY_LIMIT) {
-        config.execution.resourceLimits.memory =
-          process.env.OLLAMA_MEMORY_LIMIT;
       }
 
       if (process.env.APP_MEMORY_LIMIT) {
@@ -761,24 +764,9 @@ export function validateEnvironment(): {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Check for required environment variables in production
-  if (process.env.NODE_ENV === "production") {
-    if (!process.env.MODEL_NAME) {
-      warnings.push("MODEL_NAME not set, using default model");
-    }
-
-    if (!process.env.OLLAMA_HOST) {
-      warnings.push("OLLAMA_HOST not set, using localhost");
-    }
-  }
-
   // Validate numeric environment variables
   if (process.env.APP_PORT && isNaN(parseInt(process.env.APP_PORT, 10))) {
     errors.push("APP_PORT must be a valid number");
-  }
-
-  if (process.env.OLLAMA_PORT && isNaN(parseInt(process.env.OLLAMA_PORT, 10))) {
-    errors.push("OLLAMA_PORT must be a valid number");
   }
 
   // Validate log level
