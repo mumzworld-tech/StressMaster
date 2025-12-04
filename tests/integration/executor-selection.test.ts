@@ -154,6 +154,7 @@ describe("Executor Selection Service", () => {
           {
             id: "step1",
             name: "Step 1",
+            type: "sequential",
             steps: [
               {
                 method: "GET",
@@ -189,6 +190,7 @@ describe("Executor Selection Service", () => {
           {
             id: "step1",
             name: "Step 1",
+            type: "sequential",
             steps: [
               {
                 method: "GET",
@@ -222,7 +224,9 @@ describe("Executor Selection Service", () => {
           virtualUsers: 1,
         },
         batch: {
+          id: "batch-1",
           name: "Test Batch",
+          description: "Test batch description",
           tests: [
             {
               id: "test-1",
@@ -242,6 +246,7 @@ describe("Executor Selection Service", () => {
             },
           ],
           executionMode: "parallel",
+          aggregationMode: "combined",
         },
       };
 
@@ -314,5 +319,3 @@ describe("Executor Selection Service", () => {
     });
   });
 });
-
-
