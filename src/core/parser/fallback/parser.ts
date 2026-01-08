@@ -113,10 +113,24 @@ export class FallbackParser {
         ];
       } else {
         // Create request specification for single requests
-        if (urls.length > 0) {
+        let requestUrl = urls.length > 0 ? urls[0] : undefined;
+        
+        // Resolve OpenAPI URL if OpenAPI file is present
+        if (openapiInfo.hasOpenAPI && !requestUrl) {
+          try {
+            requestUrl = await this.resolveOpenAPIUrl(openapiInfo.filePath, rawInput);
+            if (!requestUrl) {
+              console.warn(`⚠️  Could not resolve OpenAPI URL from ${openapiInfo.filePath}`);
+            }
+          } catch (error) {
+            console.warn(`⚠️  Error resolving OpenAPI URL: ${error}`);
+          }
+        }
+
+        if (requestUrl) {
           const request: RequestSpec = {
-            method: (methods[0] || "POST") as any,
-            url: urls[0],
+            method: (methods[0] || "GET") as any,
+            url: requestUrl,
             headers: headers,
           };
 
@@ -125,13 +139,7 @@ export class FallbackParser {
             request.media = media;
           }
 
-          // Handle OpenAPI files if present
-          if (openapiInfo.hasOpenAPI) {
-            request.payload = {
-              template: openapiInfo.filePath,
-              variables: [],
-            };
-          }
+          // Note: OpenAPI file info is used for URL resolution, not as payload
 
           // Handle body/payload based on incrementing requirements
           if (bodies[0] && !media && !openapiInfo.hasOpenAPI) {
@@ -271,7 +279,7 @@ export class FallbackParser {
       try {
         // Use centralized file resolver (resolves from root directory)
         // Note: Using sync version since this method is not async
-        const { FileResolver } = require("../../../utils/file-resolver");
+        const { FileResolver } = require("../../utils/file-resolver");
         const fileContent = FileResolver.resolveFileSync(`@${fileMatch}`);
         
         console.log(`📁 Loaded JSON from file: ${fileMatch}`);
@@ -678,12 +686,85 @@ export class FallbackParser {
       const matches = input.match(pattern);
       if (matches) {
         hasOpenAPI = true;
+        // Extract file path - prefer captured group (matches[1]) over full match
+        // matches[1] should be just the filename, matches[0] is the full match
         filePath = matches[1] || matches[0];
+        
+        // Remove @ prefix if present
+        if (filePath.startsWith("@")) {
+          filePath = filePath.substring(1);
+        }
+        
+        // Clean up any leading/trailing whitespace
+        filePath = filePath.trim();
+        
+        // Remove any "from ", "with ", "using " prefixes that might have been captured
+        filePath = filePath.replace(/^(from|with|using)\s+/i, "").trim();
+        
         break;
       }
     }
 
     return { hasOpenAPI, filePath };
+  }
+
+  /**
+   * Resolve OpenAPI URL by parsing the file and extracting endpoint path from input
+   */
+  private async resolveOpenAPIUrl(filePath: string, input: string): Promise<string | undefined> {
+    try {
+      // Parse OpenAPI file
+      const { OpenAPIParser } = await import("../../../features/openapi/parser");
+      const parser = new OpenAPIParser();
+      const result = await parser.parseFromFile(filePath);
+
+      if (!result.success || !result.baseUrl) {
+        return undefined;
+      }
+
+      const baseUrl = result.baseUrl.replace(/\/$/, ""); // Remove trailing slash
+
+      // Extract endpoint path from input
+      // Look for patterns like "/get endpoint", "/post", "GET /get", etc.
+      const endpointPatterns = [
+        /(?:to|endpoint|path)\s+(\/[^\s,;]+)/i,  // "to /get endpoint" or "endpoint /get"
+        /(?:GET|POST|PUT|DELETE|PATCH)\s+(\/[^\s,;]+)/i,  // "GET /get"
+        /\/([a-zA-Z0-9\/_-]+)(?:\s+endpoint)?/i,  // "/get" or "/get endpoint"
+      ];
+
+      let endpointPath = "/";
+      for (const pattern of endpointPatterns) {
+        const match = input.match(pattern);
+        if (match && match[1]) {
+          endpointPath = match[1].startsWith("/") ? match[1] : `/${match[1]}`;
+          break;
+        }
+      }
+      
+      // If still not found, try a simpler pattern: look for "/" followed by word characters
+      if (endpointPath === "/") {
+        const simpleMatch = input.match(/\/([a-z0-9\/_-]+)/i);
+        if (simpleMatch && simpleMatch[1]) {
+          endpointPath = `/${simpleMatch[1]}`;
+        }
+      }
+
+      // If no endpoint found, try to match against OpenAPI endpoints
+      if (endpointPath === "/" && result.endpoints && result.endpoints.length > 0) {
+        // Look for endpoint mentions in input
+        for (const endpoint of result.endpoints) {
+          const endpointName = endpoint.path;
+          if (input.toLowerCase().includes(endpointName.toLowerCase())) {
+            endpointPath = endpointName;
+            break;
+          }
+        }
+      }
+
+      return `${baseUrl}${endpointPath}`;
+    } catch (error) {
+      return undefined;
+    }
   }
 
   private extractStepMedia(input: string, method: string, url: string): any {

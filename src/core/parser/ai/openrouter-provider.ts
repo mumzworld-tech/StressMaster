@@ -44,22 +44,47 @@ export class OpenRouterProvider
       const endpoint =
         this.config.endpoint || OpenRouterProvider.DEFAULT_ENDPOINT;
 
-      const response = await fetch(`${endpoint}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: request.model || this.config.model,
-          max_tokens: request.maxTokens || 2000,
-          temperature: request.temperature || 0.1,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: request.prompt },
-          ],
-        }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${endpoint}/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.config.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: request.model || this.config.model,
+            max_tokens: request.maxTokens || 2000,
+            temperature: request.temperature || 0.1,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: request.prompt },
+            ],
+          }),
+        });
+      } catch (fetchError: any) {
+        // Handle network errors with better diagnostics
+        if (fetchError?.code === "ECONNREFUSED" || fetchError?.cause?.code === "ECONNREFUSED") {
+          throw new Error(
+            `Cannot connect to OpenRouter API (${endpoint}). ` +
+            `This usually means:\n` +
+            `  1. No internet connection\n` +
+            `  2. Firewall/proxy blocking the connection\n` +
+            `  3. DNS resolution issue\n` +
+            `  4. OpenRouter service temporarily unavailable\n\n` +
+            `The fallback parser will be used instead.`
+          );
+        }
+        if (fetchError?.code === "ENOTFOUND" || fetchError?.cause?.code === "ENOTFOUND") {
+          throw new Error(
+            `Cannot resolve OpenRouter hostname (${endpoint}). ` +
+            `Check your internet connection and DNS settings.`
+          );
+        }
+        throw new Error(
+          `Network error connecting to OpenRouter: ${fetchError?.message || fetchError}`
+        );
+      }
 
       if (!response.ok) {
         const errorData = (await response.json().catch(() => ({}))) as any;

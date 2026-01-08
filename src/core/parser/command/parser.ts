@@ -89,30 +89,37 @@ export class UnifiedCommandParser implements CommandParser {
         }
       }
 
-      // Prioritize: environment variables -> config file -> constructor config -> defaults
+      // Determine provider first
+      const provider =
+        process.env.AI_PROVIDER ||
+        aiConfigFromFile.provider ||
+        this.config.aiProvider ||
+        "ollama";
+
+      // Get provider-specific defaults
+      const defaultConfig = AIProviderFactory.getDefaultConfig(provider as any);
+
+      // Prioritize: environment variables -> config file -> constructor config -> provider defaults
       const aiConfig: AIConfig = {
-        provider:
-          (process.env.AI_PROVIDER as AIConfig["provider"]) ||
-          aiConfigFromFile.provider ||
-          (this.config.aiProvider as AIConfig["provider"]) ||
-          "claude",
+        provider: provider as any,
         model:
           process.env.AI_MODEL ||
           aiConfigFromFile.model ||
           this.config.modelName ||
-          "claude-3-5-sonnet-20241022",
+          defaultConfig.model ||
+          "llama3.2:1b",
         apiKey:
           process.env.AI_API_KEY ||
           process.env.ANTHROPIC_API_KEY ||
           process.env.OPENAI_API_KEY ||
-          process.env.OPENROUTER_API_KEY ||
-          process.env.AMAZON_Q_API_KEY ||
           aiConfigFromFile.apiKey ||
           this.config.apiKey,
         endpoint:
           process.env.AI_ENDPOINT ||
           aiConfigFromFile.endpoint ||
-          this.config.ollamaEndpoint,
+          this.config.ollamaEndpoint ||
+          defaultConfig.endpoint ||
+          "http://localhost:11434",
         maxRetries: aiConfigFromFile.maxRetries || this.config.maxRetries || 3,
         timeout: aiConfigFromFile.timeout || this.config.timeout || 30000,
         options: aiConfigFromFile.options || {},
@@ -187,14 +194,19 @@ export class UnifiedCommandParser implements CommandParser {
 
           // Use AI result if it's valid (Claude is very capable, so we trust it more)
           if (isAIResultValid) {
-            console.log("✅ AI parsing successful!");
             metrics.confidenceScore = aiResult.confidence;
             metrics.parseTime = Date.now() - startTime;
+
+            // Resolve OpenAPI URLs before enhancing
+            let specWithResolvedUrls = await this.resolveOpenAPIUrls(
+              aiResult.spec,
+              input
+            );
 
             // Directly enhance the AI result with incrementing support
             try {
               const enhancedSpec = ResponseHandler.enhanceLoadTestSpec(
-                aiResult.spec,
+                specWithResolvedUrls,
                 input
               );
 
@@ -206,9 +218,7 @@ export class UnifiedCommandParser implements CommandParser {
               return enhancedSpec;
             } catch (enhanceError) {
               metrics.errorCount++;
-              console.warn(`AI enhancement failed: ${enhanceError}`);
               // Unified fallback for all providers
-              console.log("🔄 AI enhancement failed, using fallback");
               metrics.fallbackUsed = true;
               const fallbackResult = await this.fallbackParser.parseCommand(
                 input
@@ -229,7 +239,6 @@ export class UnifiedCommandParser implements CommandParser {
       }
 
       // Fallback to rule-based parsing
-      console.log("🔄 Falling back to non-AI parser...");
       metrics.fallbackUsed = true;
       const fallbackResult = await this.fallbackParser.parseCommand(input);
       metrics.confidenceScore = fallbackResult.confidence;
@@ -289,13 +298,42 @@ export class UnifiedCommandParser implements CommandParser {
 
       // Parse the response
       try {
-        const parsedJson = JSON.parse(response.response);
+        let parsedJson;
+        try {
+          parsedJson = JSON.parse(response.response);
+        } catch (parseError) {
+          // Try to clean the response (remove markdown code blocks, etc.)
+          let cleaned = response.response
+            .replace(/```json\n?/g, "")
+            .replace(/```\n?/g, "")
+            .trim();
+          
+          // Try to extract JSON from the response
+          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            cleaned = jsonMatch[0];
+          }
+          
+          try {
+            parsedJson = JSON.parse(cleaned);
+          } catch (e) {
+            console.log("❌ Failed to parse AI response as JSON");
+            if (process.env.DEBUG) {
+              console.log("Raw response:", response.response.substring(0, 500));
+            }
+            throw new Error("AI response is not valid JSON");
+          }
+        }
 
         // AI response received
 
         // Validate the AI response structure
         if (!this.isValidAIResponse(parsedJson)) {
-          console.log("❌ AI response validation failed");
+          if (process.env.DEBUG) {
+            const responsePreview = JSON.stringify(parsedJson, null, 2).substring(0, 1000);
+            console.log("❌ AI response validation failed");
+            console.log("AI Response preview:", responsePreview);
+          }
           throw new Error("AI response has invalid structure");
         }
 
@@ -576,9 +614,14 @@ export class UnifiedCommandParser implements CommandParser {
         }
 
         // Check for valid URL format
+        // Allow OpenAPI file references in URLs (they'll be resolved later)
         try {
           new URL(firstRequest.url);
         } catch {
+          // If URL validation fails, check if it's an OpenAPI reference
+          if (firstRequest.url.includes(".yaml") || firstRequest.url.includes(".yml") || firstRequest.url.includes(".json")) {
+            return true; // Will be resolved later
+          }
           return false;
         }
       }
@@ -602,9 +645,14 @@ export class UnifiedCommandParser implements CommandParser {
                 return false;
               }
               // Check for valid URL format
+              // Allow OpenAPI file references in URLs (they'll be resolved later)
               try {
                 new URL(step.url);
               } catch {
+                // If URL validation fails, check if it's an OpenAPI reference
+                if (step.url.includes(".yaml") || step.url.includes(".yml") || step.url.includes(".json")) {
+                  return true; // Will be resolved later
+                }
                 return false;
               }
             }
@@ -629,10 +677,19 @@ export class UnifiedCommandParser implements CommandParser {
         }
 
         // Check for valid URL format
+        // Allow OpenAPI file references in URLs (they'll be resolved later)
         try {
           new URL(firstRequest.url);
           return true;
         } catch {
+          // If URL validation fails, check if it's an OpenAPI reference or relative path
+          // Relative paths (starting with /) are valid when OpenAPI will resolve them
+          if (firstRequest.url.startsWith("/") || 
+              firstRequest.url.includes(".yaml") || 
+              firstRequest.url.includes(".yml") || 
+              firstRequest.url.includes(".json")) {
+            return true; // Will be resolved later by resolveOpenAPIUrls
+          }
           return false;
         }
       }
@@ -647,10 +704,15 @@ export class UnifiedCommandParser implements CommandParser {
       }
 
       // Check for valid URL format
+      // Allow OpenAPI file references in URLs (they'll be resolved later)
       try {
         new URL(response.url);
         return true;
       } catch {
+        // If URL validation fails, check if it's an OpenAPI reference
+        if (response.url.includes(".yaml") || response.url.includes(".yml") || response.url.includes(".json")) {
+          return true; // Will be resolved later
+        }
         return false;
       }
     }
@@ -683,6 +745,140 @@ export class UnifiedCommandParser implements CommandParser {
     }
 
     return filePaths;
+  }
+
+  /**
+   * Resolve OpenAPI URLs by combining base URL with endpoint paths
+   */
+  private async resolveOpenAPIUrls(
+    spec: LoadTestSpec,
+    originalInput: string
+  ): Promise<LoadTestSpec> {
+    if (!spec.requests || spec.requests.length === 0) {
+      return spec;
+    }
+
+    // Check if input contains OpenAPI file reference
+    const fileMatch = originalInput.match(/@([\w\-_\/]+\.(yaml|yml|json))/i);
+    if (!fileMatch) {
+      return spec; // No OpenAPI file reference
+    }
+
+    const fileName = fileMatch[1];
+
+    try {
+      // Parse the OpenAPI file to get base URL
+      const { OpenAPIParser } = await import("../../../features/openapi/parser");
+      const parser = new OpenAPIParser();
+      const result = await parser.parseFromFile(fileName);
+
+      if (!result.success || !result.baseUrl) {
+        return spec; // Failed to parse or no base URL
+      }
+
+      const baseUrl = result.baseUrl.replace(/\/$/, ""); // Remove trailing slash
+
+      // Resolve URLs in all requests
+      const resolvedRequests = spec.requests.map((request) => {
+        // Skip if URL is already absolute
+        if (request.url && (request.url.startsWith("http://") || request.url.startsWith("https://"))) {
+          return request;
+        }
+
+        // If URL is relative (starts with /), combine with base URL
+        if (request.url && request.url.startsWith("/")) {
+          return {
+            ...request,
+            url: `${baseUrl}${request.url}`,
+          };
+        }
+
+        // If URL contains the file reference (e.g., "https://test-api.yaml/get"), resolve it
+        if (request.url && request.url.includes(fileName)) {
+          // Extract endpoint path from URL like "https://test-api.yaml/get"
+          const urlMatch = request.url.match(
+            /https?:\/\/[^\/]+\.(yaml|yml|json)(\/.*)?/i
+          );
+          if (urlMatch && urlMatch[2]) {
+            const endpointPath = urlMatch[2];
+            return {
+              ...request,
+              url: `${baseUrl}${endpointPath}`,
+            };
+          }
+        }
+
+        return request;
+      });
+
+      // Remove payload.template if it's an OpenAPI file reference (not a JSON body file)
+      const cleanedRequests = resolvedRequests.map((request) => {
+        if (request.payload?.template === `@${fileName}`) {
+          // For GET requests, remove the payload entirely
+          if (request.method === "GET" || !request.method) {
+            const { payload, ...rest } = request;
+            return rest;
+          }
+          // For POST/PUT requests, generate body from OpenAPI schema
+          // Find the endpoint in the OpenAPI spec
+          const endpointPath = request.url?.replace(baseUrl, "") || "/";
+          const endpoint = result.endpoints?.find(
+            (e: any) => e.path === endpointPath && e.method.toLowerCase() === request.method?.toLowerCase()
+          );
+
+          if (endpoint?.requestBody?.schema) {
+            // Generate example body from schema
+            const exampleBody = this.generateBodyFromSchema(endpoint.requestBody.schema);
+            return {
+              ...request,
+              body: exampleBody,
+              payload: undefined, // Remove payload template
+            };
+          } else {
+            // No schema found, remove payload
+            const { payload, ...rest } = request;
+            return rest;
+          }
+        }
+        return request;
+      });
+
+      return {
+        ...spec,
+        requests: cleanedRequests,
+      };
+    } catch (error) {
+      // If resolution fails, return original spec
+      return spec;
+    }
+  }
+
+  /**
+   * Generate example body from OpenAPI schema
+   */
+  private generateBodyFromSchema(schema: any): any {
+    if (!schema || !schema.properties) {
+      return {};
+    }
+
+    const body: any = {};
+    for (const [key, prop] of Object.entries(schema.properties as Record<string, any>)) {
+      if (prop.example !== undefined) {
+        body[key] = prop.example;
+      } else if (prop.type === "string") {
+        body[key] = prop.format === "email" ? "user@example.com" : "string";
+      } else if (prop.type === "integer" || prop.type === "number") {
+        body[key] = prop.minimum !== undefined ? prop.minimum : 0;
+      } else if (prop.type === "boolean") {
+        body[key] = false;
+      } else if (prop.type === "array") {
+        body[key] = [];
+      } else if (prop.type === "object") {
+        body[key] = {};
+      }
+    }
+
+    return body;
   }
 
   private detectOpenAPIFile(input: string): boolean {
@@ -793,17 +989,25 @@ export class UnifiedCommandParser implements CommandParser {
    */
   private createOpenAPIContext(result: any): string {
     const { spec, endpoints } = result;
+    const baseUrl = spec.servers?.[0]?.url || "Not specified";
 
-    let context = `API: ${spec.info?.title || "Unknown"} (${
-      spec.info?.version || "Unknown"
-    })\n`;
-    context += `Base URL: ${spec.servers?.[0]?.url || "Not specified"}\n`;
-    context += `Endpoints:\n`;
+    let context = `\n=== OpenAPI Specification Context ===\n`;
+    context += `API: ${spec.info?.title || "Unknown"} (${spec.info?.version || "Unknown"})\n`;
+    context += `Base URL: ${baseUrl}\n\n`;
+    context += `CRITICAL INSTRUCTIONS FOR OPENAPI:\n`;
+    context += `1. When user references an endpoint path (e.g., "/get"), combine it with the base URL above\n`;
+    context += `2. Construct the full URL as: ${baseUrl}/<endpoint-path>\n`;
+    context += `3. Example: If base URL is "https://httpbin.org" and user says "/get endpoint", use URL: "https://httpbin.org/get"\n`;
+    context += `4. If base URL is "Not specified", you may use a placeholder URL that includes the file reference (e.g., "https://test-api.yaml/get") - it will be resolved automatically\n\n`;
+    context += `Available Endpoints:\n`;
 
     endpoints.forEach((endpoint: any, index: number) => {
-      context += `${index + 1}. ${endpoint.method.toUpperCase()} ${
-        endpoint.path
-      }\n`;
+      const fullUrl = baseUrl !== "Not specified" 
+        ? `${baseUrl.replace(/\/$/, "")}${endpoint.path}`
+        : `https://test-api.yaml${endpoint.path}`;
+      
+      context += `${index + 1}. ${endpoint.method.toUpperCase()} ${endpoint.path}\n`;
+      context += `   Full URL: ${fullUrl}\n`;
       if (endpoint.summary) {
         context += `   Summary: ${endpoint.summary}\n`;
       }
@@ -830,7 +1034,8 @@ export class UnifiedCommandParser implements CommandParser {
     });
 
     context +=
-      "\nIMPORTANT: Use the examples and schema to generate REALISTIC values, not faker templates.";
+      "\nIMPORTANT: Use the examples and schema to generate REALISTIC values, not faker templates.\n";
+    context += `When constructing URLs, use the full URL format shown above.\n`;
 
     return context;
   }
@@ -898,9 +1103,6 @@ export class UnifiedCommandParser implements CommandParser {
       } catch {
         // If it's character-by-character encoded, try to reconstruct
         if (body.includes('"0":"') && body.includes('"1":"')) {
-          console.log(
-            "🔧 Detected character-by-character encoding, attempting to fix..."
-          );
           try {
             // This is a simplified fix - in practice, we might need more sophisticated reconstruction
             // For now, let's try to extract the original JSON from the input
@@ -983,9 +1185,14 @@ export class UnifiedCommandParser implements CommandParser {
         }
 
         // Check for valid URL format
+        // Allow OpenAPI file references in URLs (they'll be resolved later)
         try {
           new URL(firstRequest.url);
         } catch (e) {
+          // If URL validation fails, check if it's an OpenAPI reference
+          if (firstRequest.url.includes(".yaml") || firstRequest.url.includes(".yml") || firstRequest.url.includes(".json")) {
+            return true; // Will be resolved later
+          }
           console.log("❌ Failed: URL format invalid in batch test");
           return false;
         }
@@ -1016,9 +1223,17 @@ export class UnifiedCommandParser implements CommandParser {
                 return false;
               }
               // Check for valid URL format
+              // Allow OpenAPI file references in URLs (they'll be resolved later)
               try {
                 new URL(step.url);
               } catch (e) {
+                // If URL validation fails, check if it's an OpenAPI reference or relative path
+                if (step.url.startsWith("/") ||
+                    step.url.includes(".yaml") || 
+                    step.url.includes(".yml") || 
+                    step.url.includes(".json")) {
+                  return true; // Will be resolved later
+                }
                 console.log("❌ Failed: URL format invalid in workflow");
                 return false;
               }
@@ -1055,6 +1270,14 @@ export class UnifiedCommandParser implements CommandParser {
     try {
       new URL(firstRequest.url);
     } catch (e) {
+      // If URL validation fails, check if it's an OpenAPI reference or relative path
+      // Relative paths (starting with /) are valid when OpenAPI will resolve them
+      if (firstRequest.url.startsWith("/") || 
+          firstRequest.url.includes(".yaml") || 
+          firstRequest.url.includes(".yml") || 
+          firstRequest.url.includes(".json")) {
+        return true; // Will be resolved later by resolveOpenAPIUrls
+      }
       console.log("❌ Failed: URL format invalid");
       return false;
     }
