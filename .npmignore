@@ -1,0 +1,86 @@
+# Development files
+.cursor/
+.kiro/
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Source files (only dist/ is needed)
+src/
+tests/
+test/
+
+# Documentation and guides (keep only README.md)
+LOCAL_TESTING_GUIDE.md
+TEST_PROJECT_SETUP.md
+*.md
+!README.md
+
+# Configuration files
+.env.example
+.editorconfig
+.nvmrc
+tsconfig.json
+vitest*.config.ts
+*.config.ts
+*.config.js
+
+# Docker files
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Scripts
+scripts/
+*.sh
+
+# Development artifacts
+*.log
+*.tgz
+coverage/
+.nyc_output/
+
+# Generated files and caches
+.stressmaster/
+config/
+cache/
+k6-scripts/
+exports/
+results/
+
+# JSON files (except package files)
+*.json
+!package.json
+!package-lock.json
+
+# Test files
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+
+# Examples and samples
+api-spec.yaml
+stock-test-data.json
+price-update.json
+examples/
+
+# Build artifacts
+*.map
+!dist/**/*.map
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+
