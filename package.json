@@ -1,6 +1,6 @@
 {
   "name": "stressmaster",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "AI-powered load testing CLI tool using natural language commands. Convert plain English test descriptions into K6 load test scripts.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
