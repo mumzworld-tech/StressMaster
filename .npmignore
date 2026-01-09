@@ -23,6 +23,7 @@ TEST_PROJECT_SETUP.md
 .env.example
 .editorconfig
 .nvmrc
+.npmrc
 tsconfig.json
 vitest*.config.ts
 *.config.ts

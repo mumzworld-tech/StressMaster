@@ -1,0 +1,13 @@
+# NPM Registry Configuration
+# Copy this file to .npmrc and add your tokens
+
+# NPM Registry
+registry=https://registry.npmjs.org/
+
+# NPM Authentication Token (get from https://www.npmjs.com/settings/[username]/tokens)
+# Create an "Automation" token and paste it here
+//registry.npmjs.org/:_authToken=YOUR_NPM_TOKEN_HERE
+
+# GitHub Packages (if needed)
+@mumzworld-tech:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN_HERE

@@ -14,12 +14,20 @@ Use this checklist before publishing StressMaster to npm.
 
 - [ ] **Verify `.npmignore` is correct** (Already configured ✅)
 
-- [ ] **Set up npm account**:
+- [ ] **Set up npm authentication using `.npmrc`**:
 
+  **Option A: Using .npmrc file (Recommended)**
+  - Get npm token: https://www.npmjs.com/settings/[username]/tokens
+  - Add to `.npmrc`: `//registry.npmjs.org/:_authToken=YOUR_TOKEN`
+  - Verify: `npm whoami` (should show username without login)
+  
+  **Option B: Using npm login (Alternative)**
   ```bash
   npm login
   npm whoami  # Verify you're logged in
   ```
+  
+  See [NPMRC_SETUP_GUIDE.md](./NPMRC_SETUP_GUIDE.md) for detailed .npmrc setup.
 
 - [ ] **Check if package name is available**:
 
