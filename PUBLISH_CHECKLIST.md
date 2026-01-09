@@ -17,16 +17,18 @@ Use this checklist before publishing StressMaster to npm.
 - [ ] **Set up npm authentication using `.npmrc`**:
 
   **Option A: Using .npmrc file (Recommended)**
+
   - Get npm token: https://www.npmjs.com/settings/[username]/tokens
   - Add to `.npmrc`: `//registry.npmjs.org/:_authToken=YOUR_TOKEN`
   - Verify: `npm whoami` (should show username without login)
-  
+
   **Option B: Using npm login (Alternative)**
+
   ```bash
   npm login
   npm whoami  # Verify you're logged in
   ```
-  
+
   See [NPMRC_SETUP_GUIDE.md](./NPMRC_SETUP_GUIDE.md) for detailed .npmrc setup.
 
 - [ ] **Check if package name is available**:
@@ -36,7 +38,7 @@ Use this checklist before publishing StressMaster to npm.
   ```
 
   If 404 → name is available ✅
-  If returns info → name is taken, consider `@mumzworld/stressmaster`
+  If returns info → name is taken, choose a different name
 
 - [ ] **Run final validation**:
 

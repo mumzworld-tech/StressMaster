@@ -19,8 +19,8 @@ StressMaster supports multiple AI providers for natural language parsing:
 - **Real-time Monitoring**: Live progress tracking and metrics
 - **Comprehensive Reporting**: Detailed analysis with AI-powered recommendations
 - **Export Formats**: JSON, CSV, and HTML export capabilities
-- **Docker-based**: Fully containerized for easy deployment
-- **No Cloud Dependencies**: Runs entirely on your local machine
+- **Cloud AI Integration**: Supports multiple cloud AI providers (Claude, OpenAI, Gemini, OpenRouter)
+- **No Local AI Required**: Uses cloud-based AI models for natural language parsing
 
 ## 🏗️ Architecture
 
@@ -38,11 +38,10 @@ StressMaster supports multiple AI providers for natural language parsing:
 
 ## 📋 Prerequisites
 
-- **Docker**: Version 20.10 or higher
-- **Docker Compose**: Version 2.0 or higher
-- **System Memory**: Minimum 8GB RAM (16GB recommended)
-- **Storage**: Minimum 20GB free space
-- **Network**: Internet access for initial setup
+- **Node.js**: Version 18.0 or higher
+- **npm**: Version 9.0 or higher
+- **K6**: Installed and available in PATH (for load test execution)
+- **Internet Access**: Required for AI provider API calls
 
 ## 🚀 Quick Start
 
@@ -62,8 +61,8 @@ stressmaster --version
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd stressmaster
+git clone https://github.com/mumzworld-tech/StressMaster.git
+cd StressMaster
 
 # Install dependencies
 npm install
@@ -246,22 +245,13 @@ StressMaster automatically creates a configuration file on first use. You can sw
 
 #### Quick Provider Switching:
 
+Use the interactive setup wizard to switch providers:
+
 ```bash
-# Switch to Claude via OpenRouter
-sm-claude-openrouter
-
-# Switch to OpenAI
-sm-openai
-
-# Switch to direct Claude API
-sm-claude
-
-# Switch to OpenRouter with multiple models
-sm-openrouter
-
-# Switch to Google Gemini
-sm-gemini
+stressmaster setup
 ```
+
+Or manually edit the configuration file (see below).
 
 #### Manual Configuration:
 
@@ -282,10 +272,10 @@ The AI configuration is stored in `.stressmaster/config/ai-config.json` (automat
 
 #### Provider Setup:
 
-- **OpenAI**: Get API key from OpenAI and use `sm-openai`
-- **Claude**: Get API key from Anthropic and use `sm-claude`
-- **OpenRouter**: Get API key from OpenRouter and use `sm-claude-openrouter` or `sm-openrouter`
-- **Gemini**: Get API key from Google AI and use `sm-gemini`
+- **OpenAI**: Get API key from OpenAI and configure via `stressmaster setup`
+- **Claude**: Get API key from Anthropic and configure via `stressmaster setup`
+- **OpenRouter**: Get API key from OpenRouter and configure via `stressmaster setup`
+- **Gemini**: Get API key from Google AI and configure via `stressmaster setup`
 
 > **Note**: The `config/ai-config.json` file contains API keys and is automatically excluded from git. Use `config/ai-config.example.json` as a reference.
 
@@ -406,10 +396,6 @@ StressMaster supports multiple AI model configurations. Choose the setup that be
 ### Option 1: Claude / OpenRouter (Recommended)
 
 Use Anthropic Claude directly or via OpenRouter for reliable, high-quality parsing.
-
-#### Docker Setup (Alternative):
-
-You can also run StressMaster and its dependencies via Docker Compose (see `docker-compose.yml`), but AI providers are expected to be cloud-hosted (Claude, OpenRouter, OpenAI, Gemini) rather than local Ollama.
 
 ### Option 2: OpenAI API
 
@@ -691,127 +677,78 @@ Send POST requests to https://api.example.com/orders with complex JSON:
 
 ### Performance Tuning
 
-#### For High-Volume Testing
+For high-volume or long-duration tests, ensure you have sufficient system resources:
 
-```bash
-# Increase resource limits
-OLLAMA_MEMORY_LIMIT=8g
-APP_MEMORY_LIMIT=2g
-K6_MEMORY_LIMIT=4g
-
-# Restart services
-docker-compose down && docker-compose up -d
-```
-
-#### For Long-Duration Tests
-
-```bash
-# Enable persistent storage
-docker volume create stressmaster-results
-
-# Monitor resources
-./scripts/monitor.sh monitor
-```
+- **Memory**: K6 executor may require additional memory for large tests
+- **Network**: Ensure stable internet connection for AI API calls
+- **Storage**: Test results are stored locally in `.stressmaster/` directory
 
 ## 🔍 Monitoring and Troubleshooting
 
 ### Health Checks
 
-Check system status:
+Verify your setup:
 
 ```bash
-# Quick status check
-./scripts/monitor.sh status
+# Check StressMaster installation
+stressmaster --version
 
-# Continuous monitoring
-./scripts/monitor.sh monitor
+# Check K6 installation
+k6 version
 
-# Detailed health check
-curl http://localhost:11434/api/tags
-```
-
-### Log Analysis
-
-Collect and analyze logs:
-
-```bash
-# Collect all logs
-./scripts/monitor.sh logs
-
-# View real-time logs
-docker-compose logs -f
-
-# Filter specific service logs
-docker-compose logs -f stressmaster
+# Test AI provider configuration
+stressmaster setup
 ```
 
 ### Common Issues and Solutions
 
 #### High Memory Usage
 
-```bash
-# Check resource usage
-docker stats
-
-# Reduce memory limits
-docker-compose restart
-```
+Monitor system resources using your OS tools (Activity Monitor on macOS, Task Manager on Windows, htop on Linux).
 
 #### Test Execution Failures
 
 ```bash
-# Check K6 logs
-docker-compose logs k6-runner
-
 # Verify target API accessibility
 curl -I https://your-target-api.com
 
-# Check network connectivity
-docker-compose exec stressmaster ping your-target-api.com
+# Check K6 installation
+k6 version
+
+# Verify AI provider configuration
+stressmaster setup
 ```
 
 ## 🔒 Security Considerations
 
 ### Network Security
 
-- Services communicate via isolated Docker network
-- Only necessary ports exposed to host
+- All API calls use HTTPS
 - Input validation on all user inputs
+- Secure storage of API keys in configuration files
 
 ### Data Security
 
-- No data sent to external services (with local Ollama)
-- Local model processing only
-- Configurable data retention policies
+- API keys stored locally in `.stressmaster/config/ai-config.json` (excluded from git)
+- Test results stored locally in `.stressmaster/` directory
+- No data sent to external services except configured AI providers
 
-### Container Security
+## 🚀 Installation Options
 
-- Non-root user execution
-- Read-only file systems where possible
-- Resource limits to prevent DoS
-
-## 🚀 Deployment Options
-
-### Development
+### Global Installation (Recommended)
 
 ```bash
-# Quick development setup
-docker-compose up -d
+npm install -g stressmaster
 ```
 
-### Production
+### Development Installation
 
 ```bash
-# Production deployment with monitoring
-./scripts/deploy.sh
-./scripts/monitor.sh monitor
-```
-
-### CI/CD Integration
-
-```bash
-# Automated testing in CI
-docker-compose -f docker-compose.yml -f docker-compose.ci.yml up --abort-on-container-exit
+git clone https://github.com/mumzworld-tech/StressMaster.git
+cd StressMaster
+npm install
+npm run build
+npm link
 ```
 
 ## 🤝 Contributing
@@ -856,7 +793,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For support and questions:
 
-- Check the [FAQ](docs/FAQ.md) for common issues
-- Review [examples](docs/EXAMPLES.md) for usage patterns
-- Consult [troubleshooting guide](docs/TROUBLESHOOTING.md) for solutions
-- Open an issue on GitHub for bugs or feature requests
+- Review the examples in this README for usage patterns
+- Check the [CHANGELOG.md](./CHANGELOG.md) for recent updates
+- Open an issue on [GitHub](https://github.com/mumzworld-tech/StressMaster/issues) for bugs or feature requests

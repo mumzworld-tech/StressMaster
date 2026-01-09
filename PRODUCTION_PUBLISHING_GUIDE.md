@@ -72,23 +72,16 @@ Your `.npmignore` file is already configured correctly. It excludes:
 - Documentation except README.md
 - Generated files
 
-### 4. ✅ NPM Account Setup (For Company/Organization)
+### 4. ✅ NPM Account Setup
 
-**Since this is an open-source project owned by mumzworld-tech:**
-
-1. **Create npm organization (if not exists):**
-
-   - Go to: https://www.npmjs.com/org/create
-   - Organization name: `mumzworld` (or your company's npm org name)
-   - Choose "Free" plan (perfect for open-source)
-   - Add team members who need publish access
-
-2. **Set up authentication using `.npmrc` file:**
+1. **Set up authentication using `.npmrc` file:**
 
    **Get your npm token:**
 
    - Go to: https://www.npmjs.com/settings/[your-username]/tokens
-   - Create new "Automation" token (for CI/CD)
+   - Create new "Granular Access Token" with:
+     - Write permission for `stressmaster` package
+     - "Bypass 2FA" enabled (required for publishing)
    - Copy the token (starts with `npm_...`)
 
    **Add token to `.npmrc` file:**
@@ -102,47 +95,25 @@ Your `.npmignore` file is already configured correctly. It excludes:
 
    ```bash
    npm whoami  # Should show your username
-   npm org ls mumzworld  # Verify org access (if using org)
    ```
 
    **Important**: Make sure `.npmrc` is in `.npmignore` so it doesn't get published!
 
-3. **Verify package name availability:**
+2. **Verify package name availability:**
    - Check if `stressmaster` is available: https://www.npmjs.com/package/stressmaster
-   - If taken, consider: `@mumzworld/stressmaster` (scoped package)
-4. **For scoped packages, update package.json:**
+   - Package is published as `stressmaster` (unscoped, public)
 
-   ```json
-   {
-     "name": "@mumzworld/stressmaster",
-     "publishConfig": {
-       "access": "public"
-     }
-   }
-   ```
-
-   **Note**: `publishConfig.access: "public"` is required for open-source scoped packages!
-
-### 5. ✅ GitHub Secrets Configuration
+### 5. ✅ GitHub Secrets Configuration (Optional - for CI/CD)
 
 Set up GitHub Actions secrets for automated publishing:
 
-1. **Generate npm token (for organization):**
-
-   **Option A: Personal token (if you're org member):**
+1. **Generate npm token:**
 
    - Go to: https://www.npmjs.com/settings/[your-username]/tokens
-   - Create new "Automation" token
-   - Token will have org permissions if you're a member
+   - Create new "Granular Access Token" with:
+     - Write permission for `stressmaster` package
+     - "Bypass 2FA" enabled
    - Copy the token
-
-   **Option B: Organization token:**
-
-   - Go to: https://www.npmjs.com/settings/mumzworld/tokens
-   - Create new "Automation" token
-   - Copy the token
-
-   **Note**: Either token type works, but personal token is easier if you're already an org member.
 
 2. **Add to GitHub repository:**
    - Go to: `https://github.com/mumzworld-tech/StressMaster/settings/secrets/actions`
@@ -268,7 +239,7 @@ npm whoami  # Should show your username (no login needed if .npmrc is configured
 # 5. Publish (uses .npmrc token automatically)
 npm publish
 
-# For scoped packages (@mumzworld/stressmaster), publish as public:
+# Package is published as public by default (unscoped):
 # npm publish --access public
 
 **Note**: If `.npmrc` is configured with your npm token, you don't need to run `npm login`!
@@ -333,7 +304,7 @@ If `stressmaster` is taken, use a scoped package:
 
 ```json
 {
-  "name": "@mumzworld/stressmaster",
+  "name": "stressmaster",
   "publishConfig": {
     "access": "public"
   }
