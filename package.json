@@ -1,5 +1,5 @@
 {
-  "name": "@mumzworld-tech/stressmaster",
+  "name": "@mumzworld/stressmaster",
   "version": "1.0.3",
   "description": "AI-powered load testing CLI tool using natural language commands. Convert plain English test descriptions into K6 load test scripts.",
   "main": "dist/index.js",
@@ -47,7 +47,7 @@
     "url": "https://github.com/mumzworld-tech/StressMaster.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
+    "access": "public"
   },
   "bugs": {
     "url": "https://github.com/mumzworld-tech/StressMaster/issues"
