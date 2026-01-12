@@ -1,7 +1,5 @@
 # StressMaster
 
-https://github.com/user-attachments/assets/c4506072-96d2-43a7-b619-389f26480a91
-
 A local-first AI-powered load testing tool that accepts natural language commands to perform API load testing. The system uses AI models to parse user prompts and convert them into structured load test specifications that can be executed using K6.
 
 ## 🤖 AI Provider Support
