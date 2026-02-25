@@ -24,6 +24,9 @@ export function useGitHubData(): GitHubData {
     const fetchData = async () => {
       try {
         const response = await fetch(GITHUB_API_URL);
+        if (response.status === 403 || response.status === 429) {
+          throw new Error("GitHub API rate limit exceeded");
+        }
         if (!response.ok) {
           throw new Error(`GitHub API returned ${response.status}`);
         }
