@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { Zap } from "lucide-react";
+
+const basePath = process.env.NODE_ENV === "production" ? "/StressMaster" : "";
 import { Container } from "@/components/common/container";
 import { Paragraph } from "@/components/common/text";
 import { StyledLink } from "@/components/common/link";
@@ -41,7 +43,7 @@ export function Footer() {
                 Built by
               </Paragraph>
               <Image
-                src="/mumzworld-logo.gif"
+                src={`${basePath}/mumzworld-logo.gif`}
                 alt="Mumzworld"
                 width={100}
                 height={24}
