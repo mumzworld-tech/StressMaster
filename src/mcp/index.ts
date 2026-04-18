@@ -23,8 +23,13 @@ async function main() {
 
   // Graceful shutdown
   const shutdown = async () => {
-    await server.close();
-    process.exit(0);
+    try {
+      await server.close();
+      process.exit(0);
+    } catch (error) {
+      console.error("Error during shutdown:", error);
+      process.exit(1);
+    }
   };
 
   process.on("SIGINT", shutdown);

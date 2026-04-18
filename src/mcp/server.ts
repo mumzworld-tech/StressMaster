@@ -50,8 +50,8 @@ export async function createServiceContext(): Promise<ServiceContext> {
 
   // Initialize analyzer
   const analyzer = new AIResultsAnalyzer({
-    ollamaEndpoint: "http://localhost:11434",
-    modelName: "llama3",
+    ollamaEndpoint: process.env.OLLAMA_ENDPOINT || "http://localhost:11434",
+    modelName: process.env.OLLAMA_MODEL || "llama3",
     analysisTemplates: [],
     thresholds: {
       responseTime: { good: 200, acceptable: 1000, poor: 5000 },
@@ -102,12 +102,13 @@ export async function createServiceContext(): Promise<ServiceContext> {
     history: {
       getEntries: () => testHistory,
       getEntry: (id: string) => testHistory.find((entry) => entry.id === id),
-      addEntry: (entry: Omit<TestHistoryEntry, "id">) => {
+      addEntry: (entry: Omit<TestHistoryEntry, "id">): TestHistoryEntry => {
         const newEntry: TestHistoryEntry = {
           ...entry,
           id: `test_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         };
         testHistory.push(newEntry);
+        return newEntry;
       },
     },
   };

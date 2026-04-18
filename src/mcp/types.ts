@@ -170,6 +170,6 @@ export interface ServiceContext {
   history: {
     getEntries(): TestHistoryEntry[];
     getEntry(id: string): TestHistoryEntry | undefined;
-    addEntry(entry: Omit<TestHistoryEntry, "id">): void;
+    addEntry(entry: Omit<TestHistoryEntry, "id">): TestHistoryEntry;
   };
 }
