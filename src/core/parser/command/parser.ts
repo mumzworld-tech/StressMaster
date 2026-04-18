@@ -118,6 +118,15 @@ export class UnifiedCommandParser implements CommandParser {
     }
   }
 
+  /**
+   * Replace the AI provider at runtime.
+   * Used by the MCP server to inject the sampling provider after connection.
+   */
+  setAIProvider(provider: AIProvider): void {
+    this.aiProvider = provider;
+    this.isReady = true;
+  }
+
   async parseCommand(input: string): Promise<LoadTestSpec> {
     // Check cache first with smart semantic matching
     const cacheKey = this.generateCacheKey(input);

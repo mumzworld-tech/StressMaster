@@ -13,6 +13,7 @@ import { K6ScriptGenerator } from "../core/generator/script-generator";
 import { SmartLoadExecutor } from "../core/executor/smart-executor";
 import { AIResultsAnalyzer } from "../core/analyzer/results-analyzer";
 import { TemplateManagementService } from "../services/template-management.service";
+import type { AIProvider } from "../core/parser/ai-providers";
 import { ServiceContext, TestHistoryEntry } from "./types";
 import {
   runLoadTest,
@@ -37,7 +38,7 @@ export async function createServiceContext(): Promise<ServiceContext> {
   const configService = new ConfigManagementService();
   await configService.initConfig();
 
-  // Initialize parser
+  // Initialize parser (starts with configured AI provider or fallback)
   const parser = new UnifiedCommandParser({});
   await parser.initialize();
 
@@ -65,7 +66,8 @@ export async function createServiceContext(): Promise<ServiceContext> {
   // In-memory test history
   const testHistory: TestHistoryEntry[] = [];
 
-  return {
+  const ctx: ServiceContext & { _parserInstance: UnifiedCommandParser } = {
+    _parserInstance: parser,
     parser: {
       parseCommand: parser.parseCommand.bind(parser),
       initialize: parser.initialize.bind(parser),
@@ -109,12 +111,43 @@ export async function createServiceContext(): Promise<ServiceContext> {
       },
     },
   };
+
+  return ctx;
+}
+
+/**
+ * Inject the MCP sampling provider into the parser if the client supports it.
+ * Call this after the server connects to a transport.
+ */
+export function enableSamplingIfAvailable(
+  server: McpServer,
+  parserInstance: UnifiedCommandParser
+): void {
+  try {
+    const lowLevelServer = (server as any).server;
+    const capabilities = lowLevelServer?._clientCapabilities;
+    if (capabilities?.sampling) {
+      const { McpSamplingProvider } = require("./sampling-provider");
+      const samplingProvider = new McpSamplingProvider(lowLevelServer);
+      samplingProvider.initialize();
+      parserInstance.setAIProvider(samplingProvider);
+      console.error(
+        "[stressmaster-mcp] Using client AI session for parsing (no API key needed)"
+      );
+    }
+  } catch {
+    // Sampling not available — parser keeps its existing provider
+  }
 }
 
 /**
  * Create and configure the MCP server with all tools and resources.
+ * Returns the server and the parser instance (for sampling injection after connect).
  */
-export async function createServer(): Promise<McpServer> {
+export async function createServer(): Promise<{
+  server: McpServer;
+  parser: UnifiedCommandParser;
+}> {
   const server = new McpServer({
     name: "stressmaster",
     version: "1.0.0",
@@ -122,6 +155,9 @@ export async function createServer(): Promise<McpServer> {
 
   // Initialize shared service context
   const ctx = await createServiceContext();
+
+  // Keep reference to parser for sampling injection
+  const parserInstance = (ctx as any)._parserInstance as UnifiedCommandParser;
 
   // ─── Register Load Test Tools ────────────────────────────────────────────
   // Note: @ts-ignore on some tool registrations due to TS2589 deep type
@@ -254,5 +290,5 @@ export async function createServer(): Promise<McpServer> {
 
   registerResources(server, ctx);
 
-  return server;
+  return { server, parser: parserInstance };
 }

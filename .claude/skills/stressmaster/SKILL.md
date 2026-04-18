@@ -27,34 +27,13 @@ The StressMaster MCP server must be configured in your Claude Code settings. Add
 {
   "mcpServers": {
     "stressmaster": {
-      "command": "npx",
-      "args": ["stressmaster-mcp"],
-      "env": {
-        "AI_PROVIDER": "claude",
-        "AI_API_KEY": "your-api-key"
-      }
+      "command": "stressmaster-mcp"
     }
   }
 }
 ```
 
-**Using a global install:**
-
-```json
-{
-  "mcpServers": {
-    "stressmaster": {
-      "command": "stressmaster-mcp",
-      "env": {
-        "AI_PROVIDER": "claude",
-        "AI_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
-
-Supported `AI_PROVIDER` values: `openai`, `claude`, `gemini`, `openrouter`, `amazonq`.
+**No API key needed** — the MCP server automatically uses the calling agent's AI session for NL parsing via MCP sampling. If the client doesn't support sampling, set `AI_PROVIDER` and `AI_API_KEY` in the `env` block.
 
 K6 must be installed on the system for complex test execution. Simple HTTP tests run via Node.js and do not require K6.
 

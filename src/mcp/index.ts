@@ -3,17 +3,23 @@
  * MCP Server Entry Point
  *
  * Starts the StressMaster MCP server using stdio transport.
- * Handles graceful shutdown on SIGINT/SIGTERM.
+ * After connection, enables MCP sampling if the client supports it —
+ * this lets users of Claude Code, Kiro, Codex, etc. use AI parsing
+ * without needing their own API key.
  */
 
 import "dotenv/config";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createServer } from "./server";
+import { createServer, enableSamplingIfAvailable } from "./server";
 
 async function main() {
-  const server = await createServer();
+  const { server, parser } = await createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // After connection, try to use client's AI session for parsing
+  // Fallback chain: MCP sampling → configured API key → regex fallback
+  enableSamplingIfAvailable(server, parser);
 
   // Graceful shutdown
   const shutdown = async () => {

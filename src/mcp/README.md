@@ -16,6 +16,20 @@ Add to Claude Code settings (`.claude/settings.json` or `claude_desktop_config.j
 {
   "mcpServers": {
     "stressmaster": {
+      "command": "stressmaster-mcp"
+    }
+  }
+}
+```
+
+That's it — **no API key needed.** The MCP server automatically uses the calling agent's AI session for natural language parsing via MCP sampling. Claude Code, Kiro, Codex, and other MCP clients that support sampling work out of the box.
+
+**If your client doesn't support sampling**, or you want to use a specific AI provider, add environment variables:
+
+```json
+{
+  "mcpServers": {
+    "stressmaster": {
       "command": "stressmaster-mcp",
       "env": {
         "AI_PROVIDER": "claude",
@@ -26,22 +40,11 @@ Add to Claude Code settings (`.claude/settings.json` or `claude_desktop_config.j
 }
 ```
 
-Or via npx (no global install):
+### AI Parsing Fallback Chain
 
-```json
-{
-  "mcpServers": {
-    "stressmaster": {
-      "command": "npx",
-      "args": ["-y", "stressmaster-mcp"],
-      "env": {
-        "AI_PROVIDER": "claude",
-        "AI_API_KEY": "your-api-key-here"
-      }
-    }
-  }
-}
-```
+1. **MCP Sampling** — uses the client's active AI session (no key needed)
+2. **Configured provider** — uses `AI_PROVIDER` + `AI_API_KEY` if set
+3. **Regex fallback** — basic pattern matching if no AI is available
 
 ## Configuration
 
