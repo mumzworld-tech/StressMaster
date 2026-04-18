@@ -12,7 +12,7 @@ export function registerResources(server: McpServer, ctx: ServiceContext): void 
     RESOURCE_URIS.TEST_HISTORY,
     async (uri) => {
       try {
-        const entries = await ctx.history.getEntries();
+        const entries = ctx.history.getEntries();
         return {
           contents: [{
             uri: uri.href,
@@ -38,7 +38,7 @@ export function registerResources(server: McpServer, ctx: ServiceContext): void 
     new ResourceTemplate(RESOURCE_URIS.TEST_RESULT, { list: undefined }),
     async (uri, { id }) => {
       try {
-        const entry = await ctx.history.getEntry(id as string);
+        const entry = ctx.history.getEntry(id as string);
         if (!entry) {
           return {
             contents: [{
@@ -134,7 +134,7 @@ export function registerResources(server: McpServer, ctx: ServiceContext): void 
     RESOURCE_URIS.CONFIG,
     async (uri) => {
       try {
-        const config = ctx.config.getConfig();
+        const config = await ctx.config.getConfig();
         return {
           contents: [{
             uri: uri.href,

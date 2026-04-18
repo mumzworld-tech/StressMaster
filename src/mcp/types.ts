@@ -158,14 +158,14 @@ export interface ServiceContext {
   config: {
     getConfig(): Promise<StressMasterConfig>;
     setConfig(key: string, value: string): Promise<void>;
-    initConfig(): Promise<void>;
+    initConfig(): Promise<string | void>;
   };
   templates: {
     listTemplates(): Promise<Template[]>;
-    createTemplate(name: string, spec: LoadTestSpec, description?: string): Promise<Template>;
+    createTemplate(name: string, command: string, spec: LoadTestSpec, description?: string): Promise<Template>;
     loadTemplate(name: string): Promise<Template>;
     deleteTemplate(name: string): Promise<void>;
-    exportTemplate(name: string): Promise<Template>;
+    exportTemplate(name: string, outputPath: string): Promise<void>;
   };
   history: {
     getEntries(): TestHistoryEntry[];

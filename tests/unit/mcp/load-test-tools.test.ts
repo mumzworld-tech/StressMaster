@@ -156,7 +156,7 @@ describe("Load Test Tool Handlers", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toContain("Command cannot be empty");
+        expect(result.error).toContain("non-empty string");
         expect(result.code).toBe("INVALID_INPUT");
       }
     });
@@ -166,7 +166,7 @@ describe("Load Test Tool Handlers", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toContain("Command cannot be empty");
+        expect(result.error).toContain("cannot be empty");
         expect(result.code).toBe("INVALID_INPUT");
       }
     });

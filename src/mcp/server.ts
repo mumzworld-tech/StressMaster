@@ -49,11 +49,13 @@ export async function createServiceContext(): Promise<ServiceContext> {
 
   // Initialize analyzer
   const analyzer = new AIResultsAnalyzer({
-    enableAI: false,
+    ollamaEndpoint: "http://localhost:11434",
+    modelName: "llama3",
+    analysisTemplates: [],
     thresholds: {
-      responseTime: { warning: 1000, critical: 5000 },
-      errorRate: { warning: 0.05, critical: 0.1 },
-      throughput: { warning: 10, critical: 1 },
+      responseTime: { good: 200, acceptable: 1000, poor: 5000 },
+      errorRate: { good: 0.01, acceptable: 0.05, poor: 0.1 },
+      throughput: { minimum: 1, target: 10, excellent: 100 },
     },
   });
 
@@ -122,7 +124,10 @@ export async function createServer(): Promise<McpServer> {
   const ctx = await createServiceContext();
 
   // ─── Register Load Test Tools ────────────────────────────────────────────
+  // Note: @ts-ignore on some tool registrations due to TS2589 deep type
+  // instantiation with MCP SDK generics + zod. Runtime behavior is correct.
 
+  // @ts-ignore TS2589
   server.tool(
     "run_load_test",
     "Run a load test using natural language or a structured spec",
@@ -167,6 +172,7 @@ export async function createServer(): Promise<McpServer> {
     }
   );
 
+  // @ts-ignore TS2589
   server.tool(
     "analyze_results",
     "Analyze load test results with AI insights",
@@ -213,6 +219,7 @@ export async function createServer(): Promise<McpServer> {
     }
   );
 
+  // @ts-ignore TS2589
   server.tool(
     "list_templates",
     "List all saved test templates",
@@ -225,6 +232,7 @@ export async function createServer(): Promise<McpServer> {
     }
   );
 
+  // @ts-ignore TS2589
   server.tool(
     "manage_template",
     "Create, load, delete, or export test templates",

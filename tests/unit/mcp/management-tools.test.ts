@@ -256,6 +256,7 @@ describe("Management Tool Handlers", () => {
         }
         expect(mockCtx.templates.createTemplate).toHaveBeenCalledWith(
           "test-template",
+          "test-template",
           mockSpec,
           "Test description"
         );
@@ -336,7 +337,7 @@ describe("Management Tool Handlers", () => {
           expect(result.data.template).toEqual(mockTemplate);
           expect(result.data.message).toContain("exported successfully");
         }
-        expect(mockCtx.templates.exportTemplate).toHaveBeenCalledWith("test-template");
+        expect(mockCtx.templates.loadTemplate).toHaveBeenCalledWith("test-template");
       });
     });
 

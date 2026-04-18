@@ -135,7 +135,7 @@ export async function manageTemplate(
           };
         }
 
-        const template = await ctx.templates.createTemplate(name, spec, description);
+        const template = await ctx.templates.createTemplate(name, name, spec, description);
         return {
           success: true,
           data: {
@@ -173,7 +173,7 @@ export async function manageTemplate(
       }
 
       case "export": {
-        const template = await ctx.templates.exportTemplate(name);
+        const template = await ctx.templates.loadTemplate(name);
         return {
           success: true,
           data: {

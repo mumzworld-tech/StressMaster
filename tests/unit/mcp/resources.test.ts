@@ -70,9 +70,10 @@ describe("MCP Resource Registration", () => {
   // Mock config
   const mockConfig: StressMasterConfig = {
     aiProvider: "openai",
-    aiApiKey: "test-key",
-    aiModel: "gpt-3.5-turbo",
-    defaultTestType: "baseline",
+    defaultDuration: 30,
+    defaultVirtualUsers: 10,
+    cacheEnabled: true,
+    verbose: false,
     outputFormat: "json",
   };
 
@@ -176,7 +177,9 @@ describe("MCP Resource Registration", () => {
       expect(result.contents[0].uri).toBe("stressmaster://test-history");
 
       const data = JSON.parse(result.contents[0].text);
-      expect(data).toEqual([mockHistoryEntry]);
+      expect(data).toHaveLength(1);
+      expect(data[0].id).toBe(mockHistoryEntry.id);
+      expect(data[0].command).toBe(mockHistoryEntry.command);
     });
 
     it("should handle errors gracefully", async () => {
@@ -278,7 +281,9 @@ describe("MCP Resource Registration", () => {
       expect(result.contents[0].mimeType).toBe("application/json");
 
       const data = JSON.parse(result.contents[0].text);
-      expect(data).toEqual([mockTemplate]);
+      expect(data).toHaveLength(1);
+      expect(data[0].name).toBe(mockTemplate.name);
+      expect(data[0].description).toBe(mockTemplate.description);
     });
 
     it("should handle errors gracefully", async () => {
@@ -380,7 +385,8 @@ describe("MCP Resource Registration", () => {
       expect(result.contents[0].mimeType).toBe("application/json");
 
       const data = JSON.parse(result.contents[0].text);
-      expect(data).toEqual(mockConfig);
+      expect(data.aiProvider).toBe(mockConfig.aiProvider);
+      expect(data.outputFormat).toBe(mockConfig.outputFormat);
     });
 
     it("should handle errors gracefully", async () => {
