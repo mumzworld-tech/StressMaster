@@ -791,6 +791,32 @@ src/
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## MCP Server
+
+StressMaster can be used as an MCP (Model Context Protocol) server, allowing AI coding agents like Claude Code, Kiro, and Codex to run load tests programmatically.
+
+### Quick Setup
+
+Add to your Claude Code MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "stressmaster": {
+      "command": "stressmaster-mcp",
+      "env": {
+        "AI_PROVIDER": "claude",
+        "AI_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+The MCP server exposes 8 tools (`run_load_test`, `parse_command`, `generate_k6_script`, `analyze_results`, `get_config`, `set_config`, `list_templates`, `manage_template`) and 5 resources.
+
+See [MCP Server Documentation](src/mcp/README.md) for full details.
+
 ## 🆘 Support
 
 For support and questions:
