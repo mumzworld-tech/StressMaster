@@ -9,8 +9,6 @@ set -e
 DATA_DIR="${DATA_DIR:-/app/data}"
 SCRIPTS_DIR="${SCRIPTS_DIR:-/app/scripts/k6}"
 RESULTS_DIR="${RESULTS_DIR:-/app/results}"
-OLLAMA_URL="${OLLAMA_URL:-http://ollama:11434}"
-MAX_OLLAMA_WAIT=300  # 5 minutes
 
 # Function to create required directories
 create_directories() {
@@ -30,28 +28,6 @@ create_directories() {
     # Set proper permissions
     chmod 755 "$DATA_DIR" "$SCRIPTS_DIR" "$RESULTS_DIR"
     echo "Directory creation completed"
-}
-
-# Function to wait for Ollama service
-wait_for_ollama() {
-    echo "Waiting for Ollama service at $OLLAMA_URL..."
-    
-    local wait_time=0
-    local check_interval=10
-    
-    while [ $wait_time -lt $MAX_OLLAMA_WAIT ]; do
-        if curl -f -s "$OLLAMA_URL/api/tags" >/dev/null 2>&1; then
-            echo "Ollama service is available"
-            return 0
-        fi
-        
-        echo "Ollama not ready yet, waiting... (${wait_time}s/${MAX_OLLAMA_WAIT}s)"
-        sleep $check_interval
-        wait_time=$((wait_time + check_interval))
-    done
-    
-    echo "Warning: Ollama service not available after ${MAX_OLLAMA_WAIT}s, continuing anyway..."
-    return 1
 }
 
 # Function to check Docker availability for K6 execution
@@ -80,13 +56,6 @@ init_config() {
     if [ ! -f "$config_file" ]; then
         cat > "$config_file" << EOF
 {
-  "ollama": {
-    "url": "$OLLAMA_URL",
-    "model": "stressmaster",
-    "fallbackModel": "llama3",
-    "timeout": 30000,
-    "maxRetries": 3
-  },
   "k6": {
     "image": "grafana/k6:latest",
     "scriptsDir": "$SCRIPTS_DIR",
@@ -165,9 +134,6 @@ main() {
         echo "Startup failed: Health checks failed"
         exit 1
     fi
-    
-    # Wait for Ollama (non-blocking)
-    wait_for_ollama || true
     
     # Check Docker availability (non-blocking)
     check_docker || true

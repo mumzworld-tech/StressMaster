@@ -1,6 +1,7 @@
 import { TestResult } from "../../types";
 import * as fs from "fs";
 import * as path from "path";
+import { requireStressMasterDir } from "../../utils/require-stressmaster-dir";
 
 export interface ExportOptions {
   format: "json" | "csv" | "html";
@@ -14,7 +15,10 @@ export class ExportManager {
   private defaultOutputDir: string;
 
   constructor() {
-    this.defaultOutputDir = path.join(process.cwd(), "exports");
+    const { getExportsDir, ensureStressMasterDirs } = requireStressMasterDir();
+    // Ensure all StressMaster directories exist and gitignore is set up
+    ensureStressMasterDirs();
+    this.defaultOutputDir = getExportsDir();
     this.ensureOutputDir();
   }
 

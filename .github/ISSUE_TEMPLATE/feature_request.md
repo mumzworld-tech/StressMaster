@@ -1,23 +1,27 @@
 ---
 name: Feature Request
 about: Suggest an idea for this project
-title: '[FEATURE] '
+title: "[FEATURE] "
 labels: enhancement
-assignees: ''
+assignees: ""
 ---
 
 ## Description
+
 <!-- A clear and concise description of the feature -->
 
 ## Motivation
+
 <!-- Why is this feature needed? -->
 
 ## Proposed Solution
+
 <!-- How would you like to see this implemented? -->
 
 ## Alternatives Considered
+
 <!-- Any alternative solutions or features you've considered -->
 
 ## Additional Context
-<!-- Add any other context, mockups, or examples -->
 
+<!-- Add any other context, mockups, or examples -->

@@ -44,6 +44,18 @@ export class CLIRunner {
       });
 
     this.program
+      .command("rerun")
+      .alias("repeat")
+      .alias("retry")
+      .description("Rerun the last command or a specific history entry")
+      .option("-n, --number <number>", "Rerun command #n from history")
+      .option("-f, --format <format>", "Output format (json|csv|html)", "json")
+      .option("-v, --verbose", "Enable verbose output", false)
+      .action(async (options) => {
+        await this.handleRerunCommand(options);
+      });
+
+    this.program
       .command("history")
       .description("Show command history")
       .option("-n, --number <count>", "Number of entries to show", "20")
@@ -51,6 +63,8 @@ export class CLIRunner {
       .option("--all", "Show all history")
       .option("--search <query>", "Search history")
       .option("--export [file]", "Export history to file")
+      .option("--full", "Show full commands without truncation")
+      .option("--tests", "Show load test history instead of command history")
       .action(async (options) => {
         await this.handleHistory(options);
       });
@@ -171,7 +185,106 @@ export class CLIRunner {
     }
   }
 
+  private async handleRerunCommand(options: any): Promise<void> {
+    const { CommandHistoryManager } = await import("./command-history");
+    const historyFile = options.historyFile || getCLIConfig().historyFile;
+    const historyManager = new CommandHistoryManager(1000);
+
+    try {
+      if (historyFile) {
+        await historyManager.loadFromFile(historyFile);
+      }
+    } catch (error) {
+      // History file might not exist, that's okay
+    }
+
+    const history = historyManager.getHistory();
+    let commandToRerun: string | null = null;
+
+    if (options.number) {
+      // Rerun specific history entry by number
+      const historyNumber = parseInt(options.number, 10);
+      if (historyNumber < 1 || historyNumber > history.length) {
+        console.log(
+          chalk.red(
+            `❌ Invalid history number. Please use a number between 1 and ${history.length}`
+          )
+        );
+        console.log(chalk.gray("💡 Use 'stressmaster history' to see available commands"));
+        process.exit(1);
+      }
+
+      const entry = history[historyNumber - 1]; // History is 1-indexed for users
+      commandToRerun = entry.command;
+      console.log(
+        chalk.blue(`🔄 Rerunning command #${historyNumber}: ${chalk.cyan(commandToRerun)}`)
+      );
+    } else {
+      // Rerun last command
+      if (history.length === 0) {
+        console.log(chalk.yellow("⚠️  No previous command to rerun."));
+        console.log(
+          chalk.gray("💡 Run a command first, or use 'rerun --number <n>' to rerun a specific history entry")
+        );
+        process.exit(1);
+      }
+
+      commandToRerun = history[0].command;
+      console.log(
+        chalk.blue(`🔄 Rerunning last command: ${chalk.cyan(commandToRerun)}`)
+      );
+    }
+
+    if (commandToRerun) {
+      console.log(); // Empty line for spacing
+      await this.runSingleCommand(commandToRerun, options);
+    }
+  }
+
   private async handleHistory(options: any): Promise<void> {
+    // Handle load test history
+    if (options.tests) {
+      const { LoadTestHistoryManager } = await import(
+        "./load-test-history-manager"
+      );
+      const { getResultsDir } = await import("../../utils/stressmaster-dir");
+      const loadTestHistoryFile = `${getResultsDir()}/load-test-history.json`;
+      const loadTestHistory = new LoadTestHistoryManager({
+        maxEntries: 100,
+        historyFile: loadTestHistoryFile,
+      });
+
+      await loadTestHistory.loadFromFile();
+
+      if (options.clear) {
+        loadTestHistory.clearHistory();
+        await loadTestHistory.saveToFile();
+        console.log(chalk.green("✅ Load test history cleared"));
+      } else if (options.export) {
+        const exportFile =
+          options.export === true ? "load-test-history.json" : options.export;
+        const history = loadTestHistory.getHistory();
+        const fs = await import("fs/promises");
+        await fs.writeFile(exportFile, JSON.stringify(history, null, 2));
+        console.log(chalk.green(`✅ Load test history exported to: ${exportFile}`));
+      } else {
+        const { DisplayManager } = await import("./display-manager");
+        const { CommandHistoryManager } = await import("./command-history");
+        const historyManager = new CommandHistoryManager(1000);
+        const displayManager = new DisplayManager(
+          historyManager,
+          loadTestHistory
+        );
+        displayManager.displayLoadTestHistory({
+          limit: parseInt(options.number || "20"),
+          search: options.search,
+          full: options.full,
+        });
+      }
+      return;
+    }
+
+    // Handle regular command history
     const { CommandHistoryManager } = await import("./command-history");
     const historyManager = new CommandHistoryManager(
       options.historyFile || getCLIConfig().historyFile
@@ -188,26 +301,11 @@ export class CLIRunner {
       await fs.writeFile(exportFile, JSON.stringify(history, null, 2));
       console.log(chalk.green(`✅ History exported to: ${exportFile}`));
     } else {
-      const entries = options.all
-        ? historyManager.getHistory().map((e) => e.command)
-        : historyManager.getRecentCommands(parseInt(options.number || "20"));
-
-      let filtered = entries;
-      if (options.search) {
-        const query = options.search.toLowerCase();
-        filtered = entries.filter((cmd) => cmd.toLowerCase().includes(query));
-      }
-
-      if (filtered.length === 0) {
-        console.log(chalk.yellow("No history entries found"));
-        return;
-      }
-
-      console.log(
-        chalk.blue.bold(`\n📜 Command History (${filtered.length}):\n`)
-      );
-      filtered.forEach((cmd, index) => {
-        console.log(`  ${chalk.gray(`${index + 1}.`)} ${chalk.cyan(cmd)}`);
+      const { DisplayManager } = await import("./display-manager");
+      const displayManager = new DisplayManager(historyManager);
+      displayManager.displayHistory({
+        limit: parseInt(options.number || "20"),
+        full: options.full,
       });
     }
   }

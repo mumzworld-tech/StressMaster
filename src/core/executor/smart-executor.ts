@@ -32,8 +32,11 @@ export class SmartLoadExecutor implements SmartExecutor {
   }
 
   async executeLoadTest(spec: LoadTestSpec): Promise<TestResult> {
+    console.log(chalk.gray(`   Selecting executor for ${spec.loadPattern?.virtualUsers || 1} requests...`));
     const selection = ExecutorSelectionService.selectExecutor(spec);
     const executorType = selection.executorType;
+
+    console.log(chalk.gray(`   Selected: ${executorType} executor (${selection.reason})`));
 
     this.logger.info("Executor selected", {
       executorType,
@@ -44,12 +47,16 @@ export class SmartLoadExecutor implements SmartExecutor {
     });
 
     if (executorType === "batch") {
+      console.log(chalk.gray(`   Starting batch executor...`));
       return await this.executeBatchTest(spec);
     } else if (executorType === "workflow") {
+      console.log(chalk.gray(`   Starting workflow executor...`));
       return await this.workflowExecutor.executeWorkflow(spec);
     } else if (executorType === "simple") {
+      console.log(chalk.gray(`   Starting simple HTTP executor...`));
       return await this.simpleExecutor.executeLoadTest(spec);
     } else {
+      console.log(chalk.gray(`   Starting K6 executor...`));
       try {
         return await this.k6Executor.executeLoadTest(spec);
       } catch (error) {

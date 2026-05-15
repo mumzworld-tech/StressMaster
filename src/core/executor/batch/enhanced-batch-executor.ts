@@ -235,18 +235,15 @@ export class EnhancedBatchExecutor {
 
         // Execute the test using the appropriate executor
         let result: TestResult;
-        
+
         if (test.testType === "workflow" || test.workflow) {
-          
           result = await this.workflowExecutor.executeWorkflow(loadTestSpec);
         } else if (
           loadTestSpec.loadPattern.virtualUsers &&
           loadTestSpec.loadPattern.virtualUsers > 50
         ) {
-          
           result = await this.k6Executor.executeLoadTest(loadTestSpec);
         } else {
-          
           result = await this.simpleExecutor.executeLoadTest(loadTestSpec);
         }
 
@@ -307,7 +304,13 @@ export class EnhancedBatchExecutor {
   private async generateK6Scripts(batchSpec: BatchTestSpec): Promise<void> {
     if (!batchSpec.k6Config?.generateSeparateScripts) return;
 
-    const outputDir = batchSpec.k6Config.scriptOutputDir || "k6-scripts/batch";
+    const {
+      requireStressMasterDir,
+    } = require("../../../utils/require-stressmaster-dir");
+    const { getK6ScriptsDir } = requireStressMasterDir();
+    const outputDir =
+      batchSpec.k6Config.scriptOutputDir ||
+      path.join(getK6ScriptsDir(), "batch");
 
     // Ensure output directory exists
     if (!fs.existsSync(outputDir)) {

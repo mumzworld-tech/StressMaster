@@ -1,5 +1,10 @@
 import { AnalyzedResults } from "../../types";
-import { OllamaClient, OllamaRequest, ParserConfig } from "../parser";
+import {
+  AIProvider,
+  AIProviderFactory,
+  CompletionRequest,
+  CompletionResponse,
+} from "../parser/ai-providers";
 
 export interface AnalysisTemplate {
   name: string;
@@ -9,7 +14,9 @@ export interface AnalysisTemplate {
 }
 
 export interface AnalyzerConfig {
-  ollamaEndpoint: string;
+  provider: "openai" | "claude" | "gemini" | "openrouter" | "amazonq";
+  apiKey?: string;
+  endpoint?: string;
   modelName: string;
   analysisTemplates: AnalysisTemplate[];
   thresholds: PerformanceThresholds;
@@ -34,7 +41,7 @@ export interface PerformanceThresholds {
 }
 
 export class AIAnalysisEngine {
-  private ollamaClient: OllamaClient;
+  private aiProvider: AIProvider;
   private config: AnalyzerConfig;
   private templates: Map<string, AnalysisTemplate>;
 
@@ -42,15 +49,15 @@ export class AIAnalysisEngine {
     this.config = config;
     this.templates = new Map();
 
-    // Create configuration for OllamaClient using legacy interface
-    const ollamaConfig = {
-      ollamaEndpoint: config.ollamaEndpoint,
-      modelName: config.modelName,
-      maxRetries: 3,
-      timeout: 30000,
-    } as any; // Use any to bypass type checking for legacy interface
-
-    this.ollamaClient = new OllamaClient(ollamaConfig);
+    // Initialize AI provider using the shared AIProviderFactory
+    const providerConfig = AIProviderFactory.getDefaultConfig(config.provider);
+    this.aiProvider = AIProviderFactory.create({
+      ...providerConfig,
+      provider: config.provider,
+      apiKey: config.apiKey || providerConfig.apiKey,
+      endpoint: config.endpoint || providerConfig.endpoint,
+      model: config.modelName || providerConfig.model!,
+    });
 
     // Initialize default templates
     this.initializeDefaultTemplates();
@@ -71,7 +78,7 @@ export class AIAnalysisEngine {
     for (const template of applicableTemplates) {
       try {
         const prompt = this.populateTemplate(template, results);
-        const aiResponse = await this.queryOllama(prompt);
+        const aiResponse = await this.queryAI(prompt);
 
         if (aiResponse && aiResponse.trim()) {
           recommendations.push(`AI Analysis (${template.name}): ${aiResponse}`);
@@ -199,6 +206,20 @@ Focus on comprehensive testing approaches and performance validation strategies.
     });
   }
 
+  private async queryAI(prompt: string): Promise<string> {
+    const request: CompletionRequest = {
+      prompt,
+      model: this.config.modelName,
+      temperature: 0.1,
+      maxTokens: 800,
+      format: "text",
+    };
+
+    const response: CompletionResponse =
+      await this.aiProvider.generateCompletion(request);
+    return response.response;
+  }
+
   private selectApplicableTemplates(
     results: AnalyzedResults
   ): AnalysisTemplate[] {
@@ -276,17 +297,10 @@ Focus on comprehensive testing approaches and performance validation strategies.
     return prompt;
   }
 
+  // Legacy helper kept for backward compatibility (no-op wrapper)
+  // to avoid breaking older code paths that might still reference queryOllama.
+  // New code should call queryAI instead.
   private async queryOllama(prompt: string): Promise<string> {
-    const request: OllamaRequest = {
-      model: this.config.modelName,
-      prompt,
-      options: {
-        temperature: 0.3, // Lower temperature for more focused recommendations
-        num_predict: 500, // Limit response length
-      },
-    };
-
-    const response = await this.ollamaClient.generateCompletion(request);
-    return response.response || "";
+    return this.queryAI(prompt);
   }
 }

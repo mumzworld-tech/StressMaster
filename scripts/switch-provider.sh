@@ -1,54 +1,18 @@
 #!/bin/bash
 # StressMaster AI Provider Switcher
-# Usage: ./scripts/switch-provider.sh [ollama|openai|claude|gemini|openrouter]
-PROVIDER=${1:-ollama}
-CONFIG_FILE="config/ai-config.json"
+# Usage: ./scripts/switch-provider.sh [openai|claude|claude-openrouter|gemini|openrouter|amazonq]
+PROVIDER=${1:-claude-openrouter}
+CONFIG_DIR=".stressmaster/config"
+CONFIG_FILE="$CONFIG_DIR/ai-config.json"
 
 # Auto-create config directory if it doesn't exist
-if [ ! -d "config" ]; then
-  echo "📁 Creating config directory..."
-  mkdir -p config
-fi
-
-# Auto-create config file if it doesn't exist (default to Ollama)
-if [ ! -f "$CONFIG_FILE" ]; then
-  echo "📝 Creating new AI configuration file..."
-  cat > $CONFIG_FILE << EOF
-{
-  "provider": "ollama",
-  "model": "llama3.2:1b",
-  "endpoint": "http://localhost:11434",
-  "maxRetries": 3,
-  "timeout": 30000,
-  "options": {
-    "temperature": 0.1,
-    "top_p": 0.9
-  }
-}
-EOF
-  echo "✅ Created default configuration (Ollama)"
+if [ ! -d "$CONFIG_DIR" ]; then
+  echo "📁 Creating StressMaster config directory..."
+  mkdir -p "$CONFIG_DIR"
 fi
 
 echo "🔄 Switching AI provider to: $PROVIDER"
 case $PROVIDER in
-  "ollama")
-    cat > $CONFIG_FILE << EOF
-{
-  "provider": "ollama",
-  "model": "llama3.2:1b",
-  "endpoint": "http://localhost:11434",
-  "maxRetries": 3,
-  "timeout": 30000,
-  "options": {
-    "temperature": 0.1,
-    "top_p": 0.9
-  }
-}
-EOF
-    echo "✅ Switched to Ollama (local, free)"
-    echo "📝 Make sure Ollama is running: ollama serve"
-    echo "📝 Pull a model: ollama pull llama3.2:1b"
-    ;;
   "openai")
     echo "Please enter your OpenAI API key (it should start with sk-):"
     read -s OPENAI_API_KEY
@@ -141,17 +105,38 @@ EOF
     echo "✅ Switched to OpenRouter"
     echo "📝 Available models: anthropic/claude-3-5-sonnet-20241022, openai/gpt-4, openai/gpt-3.5-turbo, google/gemini-pro"
     ;;
+  "amazonq")
+    echo "Please enter your Amazon Q API key:"
+    read -s AMAZON_Q_API_KEY
+    echo ""
+    cat > $CONFIG_FILE << EOF
+{
+  "provider": "amazonq",
+  "apiKey": "$AMAZON_Q_API_KEY",
+  "model": "amazon.q-developer",
+  "endpoint": "https://q.us-east-1.amazonaws.com",
+  "maxRetries": 3,
+  "timeout": 30000,
+  "options": {
+    "temperature": 0.1
+  }
+}
+EOF
+    echo "✅ Switched to Amazon Q"
+    echo "📝 Model: amazon.q-developer"
+    echo "📝 Get your API key from: https://aws.amazon.com/q/developer/"
+    ;;
   *)
     echo "❌ Invalid provider: $PROVIDER"
-    echo "📝 Supported providers: ollama, openai, claude, claude-openrouter, gemini, openrouter"
+    echo "📝 Supported providers: openai, claude, claude-openrouter, gemini, openrouter, amazonq"
     echo ""
     echo "📋 Provider Options:"
-    echo "  ollama           - Local AI models (free, requires Ollama)"
     echo "  openai           - OpenAI GPT models (requires OpenAI API key)"
     echo "  claude           - Claude models via direct API (requires Claude API key)"
     echo "  claude-openrouter - Claude models via OpenRouter (requires OpenRouter API key)"
     echo "  gemini           - Google Gemini models (requires Google AI API key)"
     echo "  openrouter       - Multiple models via OpenRouter (requires OpenRouter API key)"
+    echo "  amazonq          - Amazon Q Developer AI models (requires Amazon Q API key)"
     exit 1
     ;;
 esac

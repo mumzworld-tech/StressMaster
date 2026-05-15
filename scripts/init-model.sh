@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Model initialization script for Ollama
-# This script downloads and sets up the LLaMA3 model for StressMaster
+# (Deprecated) Model initialization script for Ollama
+# Ollama support has been removed from StressMaster in favor of cloud AI providers.
+# This script is kept only for historical reference and is no longer used.
 
 set -e
 

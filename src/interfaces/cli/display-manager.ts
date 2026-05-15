@@ -1,11 +1,20 @@
 import chalk from "chalk";
 import { CommandHistoryManager } from "./command-history";
+import {
+  LoadTestHistoryManager,
+  LoadTestHistoryEntry,
+} from "./load-test-history-manager";
 
 export class DisplayManager {
   private history: CommandHistoryManager;
+  private loadTestHistory?: LoadTestHistoryManager;
 
-  constructor(history: CommandHistoryManager) {
+  constructor(
+    history: CommandHistoryManager,
+    loadTestHistory?: LoadTestHistoryManager
+  ) {
     this.history = history;
+    this.loadTestHistory = loadTestHistory;
   }
 
   displayHelp(): void {
@@ -13,10 +22,33 @@ export class DisplayManager {
     console.log();
 
     console.log(chalk.yellow.bold("🎯 Basic Commands:"));
-    console.log(chalk.gray("  help     - Show this help message"));
-    console.log(chalk.gray("  history  - Show command history"));
-    console.log(chalk.gray("  clear    - Clear the screen"));
-    console.log(chalk.gray("  exit     - Exit StressMaster"));
+    console.log(chalk.gray("  help        - Show this help message"));
+    console.log(chalk.gray("  history     - Show command history"));
+    console.log(chalk.gray("  rerun       - Rerun the last command"));
+    console.log(chalk.gray("  retry       - Rerun the last command (alias)"));
+    console.log(chalk.gray("  try again   - Rerun the last command (alias)"));
+    console.log(chalk.gray("  rerun <n>   - Rerun command #n from history"));
+    console.log(chalk.gray("  retry <n>   - Rerun command #n from history"));
+    console.log(chalk.gray("  clear       - Clear the screen"));
+    console.log(chalk.gray("  exit        - Exit StressMaster"));
+    console.log();
+    
+    console.log(chalk.cyan.bold("🔄 Retry Functionality:"));
+    console.log(
+      chalk.green("  ✓ Retry works! You can rerun any command from history.")
+    );
+    console.log(
+      chalk.gray("  • Use 'retry' or 'rerun' to rerun your last command")
+    );
+    console.log(
+      chalk.gray("  • Use 'retry 3' to rerun command #3 from history")
+    );
+    console.log(
+      chalk.gray("  • Just type a number (e.g., '3') as a shortcut to rerun that command")
+    );
+    console.log(
+      chalk.gray("  • View history with 'history' to see numbered commands")
+    );
     console.log();
 
     console.log(chalk.yellow.bold("🚀 Load Testing Commands:"));
@@ -164,32 +196,104 @@ export class DisplayManager {
         "  • AI will automatically analyze OpenAPI files and generate realistic payloads"
       )
     );
+    console.log(
+      chalk.green("  • Retry functionality: Use 'retry', 'rerun', or type a number to rerun commands")
+    );
     console.log();
   }
 
-  displayHistory(): void {
-    const recentCommands = this.history.getRecentCommands(20);
+  displayHistory(options: { full?: boolean; limit?: number } = {}): void {
+    const limit = options.limit || 20;
+    const historyEntries = this.history.getHistory().slice(0, limit);
 
-    if (recentCommands.length === 0) {
+    if (historyEntries.length === 0) {
       console.log(chalk.yellow("📝 No command history found."));
       return;
     }
 
-    console.log(chalk.blue.bold("📝 Recent Commands:"));
+    console.log(chalk.blue.bold(`📝 Recent Commands (${historyEntries.length}):`));
     console.log();
 
-    recentCommands.forEach((command, index) => {
+    historyEntries.forEach((entry, index) => {
       const number = chalk.cyan(`${index + 1}.`);
-      const truncatedCommand =
-        command.length > 60 ? command.substring(0, 57) + "..." : command;
+      const timestamp = chalk.gray(
+        `[${entry.timestamp.toLocaleTimeString()}]`
+      );
+      const statusIcon =
+        entry.result === "success"
+          ? chalk.green("✓")
+          : entry.result === "error"
+          ? chalk.red("✗")
+          : chalk.yellow("○");
 
-      console.log(`${number} ${chalk.gray(truncatedCommand)}`);
+      // Show full command or wrap it
+      if (options.full || entry.command.length <= 80) {
+        // Show full command
+        console.log(
+          `${number} ${statusIcon} ${timestamp} ${chalk.gray(entry.command)}`
+        );
+
+        // Show additional metadata for load tests
+        if (entry.isLoadTest) {
+          const testInfo = [
+            entry.testName && chalk.cyan(`Test: ${entry.testName}`),
+            entry.testType && chalk.blue(`Type: ${entry.testType}`),
+            entry.metrics?.totalRequests &&
+              chalk.gray(`Requests: ${entry.metrics.totalRequests}`),
+            entry.metrics?.successRate !== undefined &&
+              chalk.gray(
+                `Success: ${(entry.metrics.successRate * 100).toFixed(1)}%`
+              ),
+          ]
+            .filter(Boolean)
+            .join(" | ");
+
+          if (testInfo) {
+            console.log(
+              chalk.gray(`   ${" ".repeat(4)}${testInfo}`)
+            );
+          }
+        }
+      } else {
+        // Wrap long commands
+        const maxWidth = process.stdout.columns || 100;
+        const indent = "   ";
+        const availableWidth = maxWidth - indent.length - 10; // Account for number and status
+
+        let remaining = entry.command;
+        let isFirstLine = true;
+
+        while (remaining.length > 0) {
+          const line =
+            remaining.length > availableWidth
+              ? remaining.substring(0, availableWidth)
+              : remaining;
+          remaining = remaining.substring(line.length);
+
+          if (isFirstLine) {
+            console.log(
+              `${number} ${statusIcon} ${timestamp} ${chalk.gray(line)}`
+            );
+            isFirstLine = false;
+          } else {
+            console.log(`${chalk.gray(indent + line)}`);
+          }
+        }
+      }
     });
 
     console.log();
     console.log(
-      chalk.gray("💡 Tip: Use arrow keys or type command number to reuse")
+      chalk.gray("💡 Tip: Use 'rerun', 'retry', or 'try again' to rerun the last command")
     );
+    console.log(
+      chalk.gray("💡 Tip: Use 'rerun <number>', 'retry <number>', or just type a number to rerun a specific command")
+    );
+    if (!options.full) {
+      console.log(
+        chalk.gray("💡 Use 'history --full' to see full commands without wrapping")
+      );
+    }
     console.log();
   }
 
@@ -238,5 +342,146 @@ export class DisplayManager {
 
   displayInfo(message: string): void {
     console.log(chalk.blue(`ℹ️  ${message}`));
+  }
+
+  /**
+   * Display load test history with full details
+   */
+  displayLoadTestHistory(
+    options: { limit?: number; search?: string; full?: boolean } = {}
+  ): void {
+    if (!this.loadTestHistory) {
+      console.log(chalk.yellow("📝 Load test history not available."));
+      return;
+    }
+
+    let entries: LoadTestHistoryEntry[];
+
+    if (options.search) {
+      entries = this.loadTestHistory.searchHistory(options.search);
+    } else {
+      entries = this.loadTestHistory.getRecentEntries(options.limit || 20);
+    }
+
+    if (entries.length === 0) {
+      console.log(chalk.yellow("📝 No load test history found."));
+      return;
+    }
+
+    console.log(
+      chalk.blue.bold(`📊 Load Test History (${entries.length}):`)
+    );
+    console.log();
+
+    entries.forEach((entry, index) => {
+      const number = chalk.cyan(`${index + 1}.`);
+      const timestamp = chalk.gray(
+        `[${entry.timestamp.toLocaleString()}]`
+      );
+      const statusIcon =
+        entry.status === "completed"
+          ? chalk.green("✓")
+          : entry.status === "failed"
+          ? chalk.red("✗")
+          : chalk.yellow("○");
+
+      // Test name and status
+      console.log(
+        `${number} ${statusIcon} ${timestamp} ${chalk.cyan(entry.parsedSpec.name)}`
+      );
+
+      // Original command (full or wrapped)
+      if (options.full || entry.originalCommand.length <= 100) {
+        console.log(
+          chalk.gray(`   Command: ${entry.originalCommand}`)
+        );
+      } else {
+        // Wrap long commands
+        const maxWidth = process.stdout.columns || 100;
+        const indent = "   Command: ";
+        const availableWidth = maxWidth - indent.length;
+
+        let remaining = entry.originalCommand;
+        let isFirstLine = true;
+
+        while (remaining.length > 0) {
+          const line =
+            remaining.length > availableWidth
+              ? remaining.substring(0, availableWidth)
+              : remaining;
+          remaining = remaining.substring(line.length);
+
+          if (isFirstLine) {
+            console.log(chalk.gray(`${indent}${line}`));
+            isFirstLine = false;
+          } else {
+            console.log(chalk.gray(`${" ".repeat(indent.length)}${line}`));
+          }
+        }
+      }
+
+      // Test details
+      const details = [
+        chalk.blue(`Type: ${entry.parsedSpec.testType}`),
+        entry.parsedSpec.requests.length > 0 &&
+          chalk.gray(
+            `URL: ${entry.parsedSpec.requests[0].url}`
+          ),
+        entry.parsedSpec.requests.length > 0 &&
+          chalk.gray(
+            `Method: ${entry.parsedSpec.requests[0].method}`
+          ),
+        entry.executionTime > 0 &&
+          chalk.gray(`Duration: ${(entry.executionTime / 1000).toFixed(2)}s`),
+      ]
+        .filter(Boolean)
+        .join(" | ");
+
+      if (details) {
+        console.log(chalk.gray(`   ${details}`));
+      }
+
+      // Metrics if available
+      if (entry.testResult?.metrics) {
+        const metrics = entry.testResult.metrics;
+        const metricsInfo = [
+          metrics.totalRequests &&
+            chalk.gray(`Requests: ${metrics.totalRequests}`),
+          metrics.successfulRequests !== undefined &&
+            chalk.green(
+              `Success: ${metrics.successfulRequests}/${metrics.totalRequests}`
+            ),
+          metrics.failedRequests !== undefined &&
+            metrics.failedRequests > 0 &&
+            chalk.red(`Failed: ${metrics.failedRequests}`),
+          metrics.responseTime?.avg !== undefined &&
+            chalk.gray(
+              `Avg Response: ${metrics.responseTime.avg.toFixed(2)}ms`
+            ),
+        ]
+          .filter(Boolean)
+          .join(" | ");
+
+        if (metricsInfo) {
+          console.log(chalk.gray(`   ${metricsInfo}`));
+        }
+      }
+
+      console.log(); // Empty line between entries
+    });
+
+    // Show statistics
+    const stats = this.loadTestHistory.getStatistics();
+    console.log(chalk.gray("─".repeat(60)));
+    console.log(
+      chalk.gray(
+        `Total: ${stats.total} | ` +
+          `✓ ${stats.successful} | ` +
+          `✗ ${stats.failed} | ` +
+          `○ ${stats.cancelled} | ` +
+          `Avg Time: ${(stats.averageExecutionTime / 1000).toFixed(2)}s`
+      )
+    );
+    console.log();
   }
 }

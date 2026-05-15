@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { BatchTestSpec } from "../../../types/load-test-spec";
+import { requireStressMasterDir } from "../../../utils/require-stressmaster-dir";
 import {
   IndividualTestReport,
   CombinedBatchReport,
@@ -14,7 +15,8 @@ export class BatchReportGenerator {
     batchSpec: BatchTestSpec,
     outputDir?: string
   ): Promise<IndividualTestReport> {
-    const reportDir = outputDir || "exports/batch";
+    const { getExportsDir } = requireStressMasterDir();
+    const reportDir = outputDir || path.join(getExportsDir(), "batch");
     if (!fs.existsSync(reportDir)) {
       fs.mkdirSync(reportDir, { recursive: true });
     }
@@ -39,7 +41,8 @@ export class BatchReportGenerator {
     individualReports: IndividualTestReport[],
     outputDir?: string
   ): Promise<CombinedBatchReport> {
-    const reportDir = outputDir || "exports/batch";
+    const { getExportsDir } = requireStressMasterDir();
+    const reportDir = outputDir || path.join(getExportsDir(), "batch");
     if (!fs.existsSync(reportDir)) {
       fs.mkdirSync(reportDir, { recursive: true });
     }

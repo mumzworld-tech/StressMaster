@@ -9,65 +9,6 @@ import {
 } from "../../src/core/parser";
 import { LoadTestSpec } from "../../src/types";
 
-// Mock the Ollama client
-vi.mock("../ollama-client", () => ({
-  OllamaClient: vi.fn().mockImplementation(() => ({
-    healthCheck: vi.fn().mockResolvedValue(true),
-    checkModelAvailability: vi.fn().mockResolvedValue(true),
-    pullModel: vi.fn().mockResolvedValue(undefined),
-    generateCompletion: vi.fn().mockImplementation((request: any) => {
-      // Dynamic response based on input
-      const prompt = request.prompt || "";
-      let method = "GET";
-      let url = "https://api.example.com/test";
-
-      if (prompt.includes("POST") || prompt.includes("post")) {
-        method = "POST";
-      }
-      if (prompt.includes("/api/orders")) {
-        url = "/api/orders";
-      }
-      if (prompt.includes("/login") || prompt.includes("login")) {
-        url = "https://api.example.com/login";
-      }
-
-      return Promise.resolve({
-        response: JSON.stringify({
-          id: "test_123",
-          name: "Test Load Test",
-          description: "Test input",
-          testType: "baseline",
-          requests: [
-            {
-              method,
-              url,
-            },
-          ],
-          loadPattern: {
-            type: "constant",
-            virtualUsers: 10,
-          },
-          duration: {
-            value: 30,
-            unit: "seconds",
-          },
-        }),
-      });
-    }),
-    getActiveConnections: vi.fn().mockReturnValue(0),
-    getQueueLength: vi.fn().mockReturnValue(0),
-    getErrorStatistics: vi.fn().mockReturnValue({}),
-    getServiceHealth: vi.fn().mockReturnValue({ status: "healthy" }),
-    clearDiagnostics: vi.fn(),
-    getGracefulDegradationStrategy: vi.fn().mockReturnValue({
-      canDegrade: false,
-      strategy: "none",
-      confidence: 1.0,
-      limitations: [],
-    }),
-  })),
-}));
-
 // Mock AI Provider Factory
 vi.mock("../ai-provider-factory", () => ({
   AIProviderFactory: {
@@ -124,7 +65,6 @@ describe("Enhanced Command Parser Integration", () => {
 
   beforeEach(async () => {
     aiParser = new AICommandParser({
-      ollamaEndpoint: "http://localhost:11434",
       modelName: "test-model",
       maxRetries: 3,
       timeout: 30000,
@@ -248,8 +188,7 @@ describe("Enhanced Command Parser Integration", () => {
       const mockGenerateCompletion = vi
         .fn()
         .mockRejectedValue(new Error("AI service unavailable"));
-      (aiParser as any).ollamaClient.generateCompletion =
-        mockGenerateCompletion;
+      (aiParser as any).aiProvider.generateCompletion = mockGenerateCompletion;
 
       const input = "GET https://api.example.com/test with 10 users";
 
@@ -267,7 +206,6 @@ describe("Enhanced Command Parser Integration", () => {
 
     it("should use fallback when AI is not ready", async () => {
       const parser = new AICommandParser({
-        ollamaEndpoint: "http://localhost:11434",
         modelName: "test-model",
         maxRetries: 3,
         timeout: 30000,

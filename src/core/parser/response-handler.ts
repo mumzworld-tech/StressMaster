@@ -294,10 +294,6 @@ export class ResponseHandler {
 
     // If we have a body but need incrementing, convert to payload structure
     if (request.body && hasIncrementKeyword && !request.payload) {
-      console.log(
-        "🔍 DEBUG: Converting body to payload, original body:",
-        JSON.stringify(request.body)
-      );
       let bodyStr =
         typeof request.body === "string"
           ? request.body
@@ -311,8 +307,6 @@ export class ResponseHandler {
 
       // Handle file references in string body
       if (typeof request.body === "string" && request.body.startsWith("@")) {
-        console.log("🔍 DEBUG: File reference detected in body string");
-
         // Extract base values from the file
         const variables = this.extractBaseValuesFromFile(
           request.body,
@@ -327,7 +321,6 @@ export class ResponseHandler {
         delete request.body;
         return request;
       }
-      console.log("🔍 DEBUG: Increment fields:", incrementFields);
 
       // Create variables for incrementing fields
       const variables: VariableDefinition[] = incrementFields.map((field) => {
@@ -347,12 +340,6 @@ export class ResponseHandler {
             bodyStr = bodyStr.replace(
               `"${field}": "${baseValue}"`,
               `"${field}": "{{${field}}}"`
-            );
-            console.log("🔍 DEBUG: Template after replacement:", bodyStr);
-          } else {
-            console.log(
-              `🔍 DEBUG: Field ${field} not found in body object:`,
-              JSON.stringify(bodyObj)
             );
           }
         } catch (e) {

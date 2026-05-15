@@ -1,6 +1,6 @@
 {
   "name": "stressmaster",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "AI-powered load testing CLI tool using natural language commands. Convert plain English test descriptions into K6 load test scripts.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,12 +45,20 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/stressmaster.git"
+    "url": "https://github.com/mumzworld-tech/StressMaster.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/stressmaster/issues"
+    "url": "https://github.com/mumzworld-tech/StressMaster/issues"
   },
-  "homepage": "https://github.com/yourusername/stressmaster#readme",
+  "homepage": "https://github.com/mumzworld-tech/StressMaster#readme",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"

@@ -1,28 +1,28 @@
 # StressMaster
 
+https://github.com/user-attachments/assets/5eb99932-492f-4d38-9e59-efce48db43b6
+
 A local-first AI-powered load testing tool that accepts natural language commands to perform API load testing. The system uses AI models to parse user prompts and convert them into structured load test specifications that can be executed using K6.
 
 ## 🤖 AI Provider Support
 
 StressMaster supports multiple AI providers for natural language parsing:
 
-- **Ollama** (Local, Free) - LLaMA3, Mistral, CodeLlama, and other local models
-- **OpenAI** - GPT-3.5, GPT-4, and other OpenAI models
 - **Claude** - Claude 3 models via direct API or OpenRouter
 - **OpenRouter** - Access to multiple AI models through OpenRouter
+- **OpenAI** - GPT-3.5, GPT-4, and other OpenAI models
 - **Google Gemini** - Gemini Pro and other Google AI models
 
 ## 🚀 Features
 
 - **Natural Language Interface**: Describe load tests in plain English
-- **Local AI Processing**: Uses LLaMA3 model running locally via Ollama
 - **Multiple Test Types**: Spike, stress, endurance, volume, and baseline testing
 - **K6 Integration**: Generates and executes K6 scripts automatically
 - **Real-time Monitoring**: Live progress tracking and metrics
 - **Comprehensive Reporting**: Detailed analysis with AI-powered recommendations
 - **Export Formats**: JSON, CSV, and HTML export capabilities
-- **Docker-based**: Fully containerized for easy deployment
-- **No Cloud Dependencies**: Runs entirely on your local machine
+- **Cloud AI Integration**: Supports multiple cloud AI providers (Claude, OpenAI, Gemini, OpenRouter)
+- **No Local AI Required**: Uses cloud-based AI models for natural language parsing
 
 ## 🏗️ Architecture
 
@@ -40,11 +40,10 @@ StressMaster supports multiple AI providers for natural language parsing:
 
 ## 📋 Prerequisites
 
-- **Docker**: Version 20.10 or higher
-- **Docker Compose**: Version 2.0 or higher
-- **System Memory**: Minimum 8GB RAM (16GB recommended)
-- **Storage**: Minimum 20GB free space
-- **Network**: Internet access for initial setup
+- **Node.js**: Version 18.0 or higher
+- **npm**: Version 9.0 or higher
+- **K6**: Installed and available in PATH (for load test execution)
+- **Internet Access**: Required for AI provider API calls
 
 ## 🚀 Quick Start
 
@@ -64,8 +63,8 @@ stressmaster --version
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd stressmaster
+git clone https://github.com/mumzworld-tech/StressMaster.git
+cd StressMaster
 
 # Install dependencies
 npm install
@@ -76,6 +75,30 @@ npm run build
 # Install globally
 npm install -g .
 ```
+
+#### Option C: Testing Locally in Another Project (Development)
+
+To test StressMaster locally in another project before publishing:
+
+```bash
+# In StressMaster directory
+npm install
+npm run build
+npm link
+
+# In your test project directory
+npm link stressmaster
+
+# Now use StressMaster in your project
+stressmaster --version
+```
+
+📖 **See [LOCAL_TESTING_GUIDE.md](./LOCAL_TESTING_GUIDE.md) for detailed instructions** on:
+
+- Testing StressMaster locally using `npm link`
+- Using `npm pack` for production-like testing
+- Verifying file resolution in other projects
+- Configuration when testing locally
 
 ### 2. First Load Test
 
@@ -160,7 +183,7 @@ This wizard will:
 StressMaster loads configuration in this priority order:
 
 1. **Environment Variables** (highest priority)
-2. **Config File** (`config/ai-config.json` in your project)
+2. **Config File** (`.stressmaster/config/ai-config.json` in your project)
 3. **package.json** (in a `stressmaster` section)
 4. **Defaults** (lowest priority)
 
@@ -177,12 +200,7 @@ AI_MODEL=claude-3-5-sonnet-20241022
 # Or for OpenAI
 AI_PROVIDER=openai
 OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-3.5-turbo
-
-# Or for Ollama
-AI_PROVIDER=ollama
-AI_ENDPOINT=http://localhost:11434
-AI_MODEL=llama3.2:1b
+AI_MODEL=gpt-3.5-turbo
 ```
 
 Then load it (if you're using a tool like `dotenv`):
@@ -194,18 +212,19 @@ export $(cat .env | xargs)
 
 #### Method 2: Config File
 
-Create `config/ai-config.json` in your project directory:
+Create `.stressmaster/config/ai-config.json` in your project directory:
 
 ```bash
 # Your project structure:
 your-project/
-├── config/
-│   └── ai-config.json    # ← Create this file
-├── .env                   # ← Or use this for env vars
+├── .stressmaster/
+│   └── config/
+│       └── ai-config.json    # ← Created by StressMaster or setup/switch scripts
+├── .env                      # ← Or use this for env vars
 └── package.json
 ```
 
-**File location:** `config/ai-config.json` in your project directory (where you run `stressmaster`)
+**File location:** `.stressmaster/config/ai-config.json` in your project directory (where you run `stressmaster`)
 
 #### Method 3: package.json
 
@@ -228,35 +247,23 @@ StressMaster automatically creates a configuration file on first use. You can sw
 
 #### Quick Provider Switching:
 
+Use the interactive setup wizard to switch providers:
+
 ```bash
-# Switch to Ollama (local, free)
-sm-ollama
-
-# Switch to Claude via OpenRouter
-sm-claude-openrouter
-
-# Switch to OpenAI
-sm-openai
-
-# Switch to direct Claude API
-sm-claude
-
-# Switch to OpenRouter with multiple models
-sm-openrouter
-
-# Switch to Google Gemini
-sm-gemini
+stressmaster setup
 ```
+
+Or manually edit the configuration file (see below).
 
 #### Manual Configuration:
 
-The AI configuration is stored in `config/ai-config.json` (automatically created on first use):
+The AI configuration is stored in `.stressmaster/config/ai-config.json` (automatically created on first use):
 
 ```json
 {
-  "provider": "ollama",
-  "model": "llama3.2:1b",
-  "endpoint": "http://localhost:11434",
+  "provider": "claude",
+  "model": "claude-3-5-sonnet-20241022",
+  "endpoint": "https://api.anthropic.com/v1",
   "maxRetries": 3,
   "timeout": 30000,
   "options": {
@@ -267,11 +274,10 @@ The AI configuration is stored in `config/ai-config.json` (automatically created
 
 #### Provider Setup:
 
-- **Ollama**: Install Ollama and run `ollama serve`, then `ollama pull llama3.2:1b`
-- **OpenAI**: Get API key from OpenAI and use `sm-openai`
-- **Claude**: Get API key from Anthropic and use `sm-claude`
-- **OpenRouter**: Get API key from OpenRouter and use `sm-claude-openrouter` or `sm-openrouter`
-- **Gemini**: Get API key from Google AI and use `sm-gemini`
+- **OpenAI**: Get API key from OpenAI and configure via `stressmaster setup`
+- **Claude**: Get API key from Anthropic and configure via `stressmaster setup`
+- **OpenRouter**: Get API key from OpenRouter and configure via `stressmaster setup`
+- **Gemini**: Get API key from Google AI and configure via `stressmaster setup`
 
 > **Note**: The `config/ai-config.json` file contains API keys and is automatically excluded from git. Use `config/ai-config.example.json` as a reference.
 
@@ -389,61 +395,9 @@ When you run `stressmaster` without arguments, you enter interactive mode where 
 
 StressMaster supports multiple AI model configurations. Choose the setup that best fits your needs:
 
-### Option 1: Local Ollama (Recommended)
+### Option 1: Claude / OpenRouter (Recommended)
 
-**Advantages**: No API costs, completely private, works offline
-
-#### Setup Steps:
-
-1. **Install Ollama** (if not using Docker):
-
-   ```bash
-   # macOS/Linux
-   curl -fsSL https://ollama.ai/install.sh | sh
-
-   # Windows
-   # Download from https://ollama.ai/download
-   ```
-
-2. **Pull the LLaMA3 Model**:
-
-   ```bash
-   # Pull the recommended model
-   ollama pull llama3.2:1b
-
-   # Or try other models
-   ollama pull llama3:latest
-   ollama pull llama3.1:8b
-   ```
-
-3. **Configure StressMaster**:
-
-   ```bash
-   # Edit your .env file
-   AI_PROVIDER=ollama
-   OLLAMA_ENDPOINT=http://localhost:11434
-   MODEL_NAME=llama3.2:1b
-   ```
-
-4. **Start Ollama**:
-
-   ```bash
-   # Start Ollama service
-   ollama serve
-
-   # In another terminal, verify it's working
-   ollama list
-   ```
-
-#### Docker Setup (Alternative):
-
-```bash
-# Start Ollama in Docker
-docker run -d --name ollama -p 11434:11434 -v ollama_data:/root/.ollama ollama/ollama
-
-# Pull model
-docker exec -it ollama ollama pull llama3.2:1b
-```
+Use Anthropic Claude directly or via OpenRouter for reliable, high-quality parsing.
 
 ### Option 2: OpenAI API
 
@@ -516,63 +470,18 @@ docker exec -it ollama ollama pull llama3.2:1b
 
 ### Configuration File
 
-Create or edit `config/ai-config.json`:
-
-```json
-{
-  "provider": "ollama",
-  "ollama": {
-    "endpoint": "http://localhost:11434",
-    "model": "llama3.2:1b"
-  },
-  "openai": {
-    "apiKey": "your-openai-key",
-    "model": "gpt-4",
-    "maxTokens": 2000
-  },
-  "anthropic": {
-    "apiKey": "your-anthropic-key",
-    "model": "claude-3-sonnet-20240229",
-    "maxTokens": 2000
-  },
-  "gemini": {
-    "apiKey": "your-gemini-key",
-    "model": "gemini-pro",
-    "maxTokens": 2000
-  }
-}
-```
+See `.stressmaster/config/ai-config.json` and `config/ai-config.example.json` for up-to-date examples of configuring Claude, OpenRouter, OpenAI, or Gemini.
 
 ### Model Comparison
 
 | Provider  | Model           | Cost              | Performance | Setup Complexity |
 | --------- | --------------- | ----------------- | ----------- | ---------------- |
-| Ollama    | LLaMA3.2:1b     | Free              | Good        | Medium           |
-| Ollama    | LLaMA3.1:8b     | Free              | Better      | Medium           |
 | OpenAI    | GPT-3.5-turbo   | $0.0015/1K tokens | Excellent   | Easy             |
 | OpenAI    | GPT-4           | $0.03/1K tokens   | Best        | Easy             |
 | Anthropic | Claude 3 Sonnet | $0.003/1K tokens  | Excellent   | Easy             |
 | Google    | Gemini Pro      | $0.0005/1K tokens | Good        | Easy             |
 
 ### Troubleshooting AI Setup
-
-#### Ollama Issues:
-
-```bash
-# Check if Ollama is running
-curl http://localhost:11434/api/tags
-
-# Restart Ollama
-sudo systemctl restart ollama
-# or
-ollama serve
-
-# Check model availability
-ollama list
-
-# Pull model if missing
-ollama pull llama3.2:1b
-```
 
 #### API Key Issues:
 
@@ -587,18 +496,6 @@ curl -H "x-api-key: your-key" \
 
 # Test Gemini
 curl "https://generativelanguage.googleapis.com/v1beta/models?key=your-key"
-```
-
-#### Performance Optimization:
-
-```bash
-# For Ollama - increase memory
-export OLLAMA_HOST=0.0.0.0
-export OLLAMA_ORIGINS=*
-export OLLAMA_MODELS=/path/to/models
-
-# For better performance with local models
-ollama run llama3.2:1b --gpu
 ```
 
 ## 💡 Usage Examples
@@ -686,9 +583,8 @@ NODE_ENV=production
 APP_PORT=3000
 
 # AI Provider settings
-AI_PROVIDER=ollama
-OLLAMA_PORT=11434
-MODEL_NAME=llama3.2:1b
+AI_PROVIDER=claude
+AI_MODEL=claude-3-5-sonnet-20241022
 
 # API Keys (if using cloud providers)
 OPENAI_API_KEY=your-openai-key
@@ -696,7 +592,6 @@ ANTHROPIC_API_KEY=your-anthropic-key
 GEMINI_API_KEY=your-gemini-key
 
 # Resource limits
-OLLAMA_MEMORY_LIMIT=4g
 APP_MEMORY_LIMIT=1g
 K6_MEMORY_LIMIT=2g
 ```
@@ -784,142 +679,78 @@ Send POST requests to https://api.example.com/orders with complex JSON:
 
 ### Performance Tuning
 
-#### For High-Volume Testing
+For high-volume or long-duration tests, ensure you have sufficient system resources:
 
-```bash
-# Increase resource limits
-OLLAMA_MEMORY_LIMIT=8g
-APP_MEMORY_LIMIT=2g
-K6_MEMORY_LIMIT=4g
-
-# Restart services
-docker-compose down && docker-compose up -d
-```
-
-#### For Long-Duration Tests
-
-```bash
-# Enable persistent storage
-docker volume create stressmaster-results
-
-# Monitor resources
-./scripts/monitor.sh monitor
-```
+- **Memory**: K6 executor may require additional memory for large tests
+- **Network**: Ensure stable internet connection for AI API calls
+- **Storage**: Test results are stored locally in `.stressmaster/` directory
 
 ## 🔍 Monitoring and Troubleshooting
 
 ### Health Checks
 
-Check system status:
+Verify your setup:
 
 ```bash
-# Quick status check
-./scripts/monitor.sh status
+# Check StressMaster installation
+stressmaster --version
 
-# Continuous monitoring
-./scripts/monitor.sh monitor
+# Check K6 installation
+k6 version
 
-# Detailed health check
-curl http://localhost:11434/api/tags
-```
-
-### Log Analysis
-
-Collect and analyze logs:
-
-```bash
-# Collect all logs
-./scripts/monitor.sh logs
-
-# View real-time logs
-docker-compose logs -f
-
-# Filter specific service logs
-docker-compose logs -f stressmaster
-docker-compose logs -f ollama
+# Test AI provider configuration
+stressmaster setup
 ```
 
 ### Common Issues and Solutions
 
-#### AI Model Not Responding
-
-```bash
-# Check Ollama service
-docker-compose logs ollama
-
-# Restart Ollama
-docker-compose restart ollama
-
-# Reinitialize model
-docker-compose --profile init up model-init
-```
-
 #### High Memory Usage
 
-```bash
-# Check resource usage
-docker stats
-
-# Reduce memory limits
-echo "OLLAMA_MEMORY_LIMIT=2g" >> .env
-docker-compose restart
-```
+Monitor system resources using your OS tools (Activity Monitor on macOS, Task Manager on Windows, htop on Linux).
 
 #### Test Execution Failures
 
 ```bash
-# Check K6 logs
-docker-compose logs k6-runner
-
 # Verify target API accessibility
 curl -I https://your-target-api.com
 
-# Check network connectivity
-docker-compose exec stressmaster ping your-target-api.com
+# Check K6 installation
+k6 version
+
+# Verify AI provider configuration
+stressmaster setup
 ```
 
 ## 🔒 Security Considerations
 
 ### Network Security
 
-- Services communicate via isolated Docker network
-- Only necessary ports exposed to host
+- All API calls use HTTPS
 - Input validation on all user inputs
+- Secure storage of API keys in configuration files
 
 ### Data Security
 
-- No data sent to external services (with local Ollama)
-- Local model processing only
-- Configurable data retention policies
+- API keys stored locally in `.stressmaster/config/ai-config.json` (excluded from git)
+- Test results stored locally in `.stressmaster/` directory
+- No data sent to external services except configured AI providers
 
-### Container Security
+## 🚀 Installation Options
 
-- Non-root user execution
-- Read-only file systems where possible
-- Resource limits to prevent DoS
-
-## 🚀 Deployment Options
-
-### Development
+### Global Installation (Recommended)
 
 ```bash
-# Quick development setup
-docker-compose up -d
+npm install -g stressmaster
 ```
 
-### Production
+### Development Installation
 
 ```bash
-# Production deployment with monitoring
-./scripts/deploy.sh
-./scripts/monitor.sh monitor
-```
-
-### CI/CD Integration
-
-```bash
-# Automated testing in CI
-docker-compose -f docker-compose.yml -f docker-compose.ci.yml up --abort-on-container-exit
+git clone https://github.com/mumzworld-tech/StressMaster.git
+cd StressMaster
+npm install
+npm run build
+npm link
 ```
 
 ## 🤝 Contributing
@@ -990,7 +821,6 @@ See [MCP Server Documentation](src/mcp/README.md) for full details.
 
 For support and questions:
 
-- Check the [FAQ](docs/FAQ.md) for common issues
-- Review [examples](docs/EXAMPLES.md) for usage patterns
-- Consult [troubleshooting guide](docs/TROUBLESHOOTING.md) for solutions
-- Open an issue on GitHub for bugs or feature requests
+- Review the examples in this README for usage patterns
+- Check the [CHANGELOG.md](./CHANGELOG.md) for recent updates
+- Open an issue on [GitHub](https://github.com/mumzworld-tech/StressMaster/issues) for bugs or feature requests
