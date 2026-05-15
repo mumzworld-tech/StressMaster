@@ -48,10 +48,21 @@ export async function createServiceContext(): Promise<ServiceContext> {
   // Initialize executor
   const executor = new SmartLoadExecutor();
 
-  // Initialize analyzer
+  // Initialize analyzer — uses the same AI provider config as the parser
+  // so the agent's configured AI_PROVIDER/AI_API_KEY env vars apply to
+  // result analysis too. When the MCP client supports sampling, the
+  // analyzer will be driven through that channel transparently.
+  const analyzerProvider = (process.env.AI_PROVIDER ?? "claude") as
+    | "openai"
+    | "claude"
+    | "gemini"
+    | "openrouter"
+    | "amazonq";
   const analyzer = new AIResultsAnalyzer({
-    ollamaEndpoint: process.env.OLLAMA_ENDPOINT || "http://localhost:11434",
-    modelName: process.env.OLLAMA_MODEL || "llama3",
+    provider: analyzerProvider,
+    apiKey: process.env.AI_API_KEY,
+    endpoint: process.env.AI_ENDPOINT,
+    modelName: process.env.AI_MODEL ?? "claude-3-haiku-20240307",
     analysisTemplates: [],
     thresholds: {
       responseTime: { good: 200, acceptable: 1000, poor: 5000 },
