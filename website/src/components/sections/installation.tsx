@@ -76,7 +76,8 @@ export function Installation() {
             Get Started in Seconds
           </Heading>
           <Paragraph size="lg" muted className="max-w-2xl mx-auto">
-            Install globally with npm and start testing immediately.
+            One install, two ways to use it: from your AI agent over MCP, or
+            straight from the terminal.
           </Paragraph>
         </motion.div>
 
@@ -99,15 +100,15 @@ export function Installation() {
                     $
                   </span>
                   <span className="text-base sm:text-lg font-medium text-white font-[family-name:var(--font-jetbrains-mono)] whitespace-nowrap">
-                    npm install -g stressmaster
+                    claude mcp add stressmaster stressmaster-mcp
                   </span>
                 </div>
-                <CopyButton text="npm install -g stressmaster" />
+                <CopyButton text="claude mcp add stressmaster stressmaster-mcp" />
               </div>
             </div>
           </div>
 
-          <Tabs defaultValue="npm" className="w-full">
+          <Tabs defaultValue="mcp" className="w-full">
             <TabsList className="w-full sm:w-auto bg-white/5 border border-white/10 rounded-lg">
               {Object.entries(INSTALLATION_TABS).map(([key, tab]) => (
                 <TabsTrigger
@@ -129,11 +130,11 @@ export function Installation() {
 
           <div className="mt-8">
             <Paragraph size="sm" muted className="mb-3">
-              Run your first test:
+              Then ask your agent:
             </Paragraph>
             <CodeBlock
               commands={[
-                'stressmaster "Send 100 GET requests to https://httpbin.org/get over 30 seconds"',
+                'Load test https://httpbin.org/get with 100 users for 30 seconds',
               ]}
             />
           </div>

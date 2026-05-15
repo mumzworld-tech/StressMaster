@@ -1,5 +1,6 @@
 import { Navbar } from "@/components/sections/navbar";
 import { Hero } from "@/components/sections/hero";
+import { MCP } from "@/components/sections/mcp";
 import { Features } from "@/components/sections/features";
 import { Architecture } from "@/components/sections/architecture";
 import { CliDemo } from "@/components/sections/cli-demo";
@@ -17,6 +18,7 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
+        <MCP />
         <Features />
         <Architecture />
         <CliDemo />
