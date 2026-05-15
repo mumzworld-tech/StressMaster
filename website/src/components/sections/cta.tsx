@@ -40,10 +40,11 @@ export function CTA() {
           className="text-center"
         >
           <Heading as="h2" className="mb-4">
-            Ready to Stress Test?
+            Wire it into your agent
           </Heading>
           <Paragraph size="lg" muted className="max-w-xl mx-auto mb-10">
-            Join the open source community. Star us on GitHub.
+            One command and Claude Code can run real load tests for you. The
+            CLI is still there too — pick whichever fits your flow.
           </Paragraph>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -70,8 +71,8 @@ export function CTA() {
               className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white border-0 px-8 h-12 text-base shadow-xl shadow-red-500/25"
               asChild
             >
-              <a href="#installation">
-                <span>Get Started</span>
+              <a href="#mcp">
+                <span>Connect to Claude Code</span>
                 <ArrowRight className="size-4" />
               </a>
             </Button>

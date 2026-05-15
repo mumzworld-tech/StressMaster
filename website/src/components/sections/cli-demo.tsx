@@ -207,11 +207,11 @@ export function CliDemo() {
           className="text-center mb-16 sm:mb-20"
         >
           <Heading as="h2" className="mb-4">
-            See It in Action
+            Or run it from the terminal
           </Heading>
           <Paragraph size="lg" muted className="max-w-2xl mx-auto">
-            Watch StressMaster turn a simple command into a full load test with
-            AI-powered analysis.
+            Prefer the original CLI? It still works exactly how you remember —
+            natural language in, K6-grade load test out.
           </Paragraph>
         </motion.div>
 

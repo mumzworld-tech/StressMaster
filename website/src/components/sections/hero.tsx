@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Sparkles, ArrowRight, ChevronDown } from "lucide-react";
+import { Plug, ArrowRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Container } from "@/components/common/container";
@@ -10,12 +10,10 @@ import { Heading, Paragraph } from "@/components/common/text";
 import { GradientText } from "@/components/common/gradient-text";
 import { DotGrid } from "@/components/effects/dot-grid";
 import { Glow } from "@/components/effects/glow";
-import { GITHUB_REPO_URL } from "@/lib/constants";
 
 function TypingTerminal() {
   const [displayText, setDisplayText] = useState("");
-  const fullCommand =
-    '$ stressmaster "send 100 GET requests to https://api.example.com"';
+  const fullCommand = "$ claude mcp add stressmaster stressmaster-mcp";
   const cursorRef = useRef(true);
 
   useEffect(() => {
@@ -104,8 +102,8 @@ export function Hero() {
               variant="outline"
               className="border-white/10 bg-white/5 text-white/70 px-4 py-1.5 text-sm gap-2"
             >
-              <Sparkles className="size-3.5 text-yellow-400" />
-              <span>Open Source</span>
+              <Plug className="size-3.5 text-red-400" />
+              <span>MCP server + open-source CLI</span>
             </Badge>
           </motion.div>
 
@@ -125,7 +123,7 @@ export function Hero() {
             >
               <span className="text-white">Load Testing</span>
               <br />
-              <GradientText variant="red-blue">on Autopilot</GradientText>
+              <GradientText variant="red-blue">from your AI agent</GradientText>
             </Heading>
           </motion.div>
 
@@ -140,9 +138,9 @@ export function Hero() {
             className="mt-6 sm:mt-8 max-w-2xl"
           >
             <Paragraph size="lg" muted className="text-base sm:text-lg md:text-xl">
-              AI-powered CLI that converts natural language into load tests.
-              Built-in executor for quick tests, K6 integration for advanced scenarios.
-              Describe your test in English, get production-grade results.
+              Claude Code, Cursor, Kiro, and Codex call StressMaster directly
+              over MCP — no API key required. Prefer the terminal? The original
+              CLI is still here, one <code className="text-white/80 font-[family-name:var(--font-jetbrains-mono)]">npm install</code> away.
             </Paragraph>
           </motion.div>
 
@@ -161,8 +159,8 @@ export function Hero() {
               className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white border-0 px-8 h-12 text-base shadow-xl shadow-red-500/25 glow-red-strong"
               asChild
             >
-              <a href="#installation">
-                <span>Get Started</span>
+              <a href="#mcp">
+                <span>Connect to your agent</span>
                 <ArrowRight className="size-4" />
               </a>
             </Button>
@@ -172,12 +170,8 @@ export function Hero() {
               className="border-white/10 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white px-8 h-12 text-base"
               asChild
             >
-              <a
-                href={GITHUB_REPO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View on GitHub
+              <a href="#cli-demo">
+                <span>Or use the CLI</span>
               </a>
             </Button>
           </motion.div>
