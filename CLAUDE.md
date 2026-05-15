@@ -110,33 +110,55 @@ stressmaster-mcp            # Start MCP server (stdio transport)
 | start | Every task | Mandatory workflow initialization |
 | commit | "commit", "/commit" | Intelligent conventional commits |
 | create-pr | "create PR", "/pr" | PR creation with validation |
+| branch-review-before-pr | Pre-PR review | Structural diff review (race conditions, query safety) |
+| pr-retro | "pr-retro", branch health | Branch retrospective + merge readiness verdict |
+| find-bugs | "find bugs", security review | Security audit + bug review of branch changes |
 | ast-grep | Code pattern search | AST-based structural code search |
+| codemap | Code search, deps, PageRank | Hybrid vector+BM25 search, dependency analysis |
+| browse | Web testing, app verification | Headless Chromium daemon for UI/web checks |
+| code-simplify | Post-change cleanup | Review changed code for reuse, quality, efficiency |
+| cost-estimate | "estimate cost" | Estimate dev cost of repo/branch/commit |
+| map-project | Single-package project | Generate/update CLAUDE.md + reference files |
+| map-project-monorepo | Monorepo | Per-package CLAUDE.md generation |
+| plan-to-task-list-with-dag | Plan feature | Interactive build planner, TASK-NNN DAG |
+| plan-founder-review | Pre-execution plan check | Founder-style plan review (APPROVE/REVISE/REJECT) |
 | run-parallel-agents-feature-build | 3+ independent features | Parallel agent orchestration |
 | run-parallel-agents-feature-debug | 3+ independent bugs | Parallel debug orchestration |
-| update-claude-md-after-install | "update docs" | Project documentation sync |
+| git-merge-expert | "merge branch", conflicts | Merge strategies, conflict resolution, PR readiness |
+| git-merge-expert-worktree | "merge in worktree" | Worktree-native merge engineering |
+| frontend-design-ui-ux | UI/UX design | Implementation-ready design specs + tokens |
+| frontend-design:frontend-design | Frontend code | Production-grade frontend implementation |
 | update-agent-learnings | Post-session | Propagate learnings to agents |
 | update-skill-learnings | Post-session | Propagate skill insights |
 | update-claude-learnings | Post-session | Update CLAUDE.md behaviors |
-| plan-enhanced | Plan mode | Optimize plans for parallel execution |
-| frontend-design | UI/UX design | Design specifications |
-| frontend-design:frontend-design | Frontend code | Production-grade frontend |
-| git-worktrees | Worktree management | Isolated branch work |
-| ulpi-generate-hooks | ULPI hooks | Generate rules.yml |
 | stressmaster | "load test", "stress test", "/stressmaster" | Run load tests via MCP tools |
 
 ### Agents
 
 | Agent | Domain |
 |-------|--------|
+| claude | Catch-all default agent (all tools) |
+| claude-code-guide | Claude Code/SDK/API questions |
 | nextjs-expert | Next.js, React, App Router |
 | nodejs-senior-api-engineer | Node.js APIs, Express, NestJS |
-| senior-product-manager | Requirements breakdown |
+| senior-product-manager | Requirements breakdown into AI-agent task lists |
 | Plan | Architecture planning |
 | Explore | Codebase exploration |
 | general-purpose | Multi-step research |
+| statusline-setup | Configure Claude Code status line |
 
 ### Plugins (MCP)
 
 | Plugin | Tools |
 |--------|-------|
 | Atlassian | Jira issues, Confluence pages, Rovo search |
+| Context7 | Library docs (resolve-library-id, query-docs) |
+| Slack | Read/send messages, search channels/users, canvases |
+| Gmail | Email auth + access |
+| Google Calendar | Calendar auth + access |
+| Google Drive | Drive auth + access |
+| Vercel | Deployment auth + access |
+| Canva | Design auth + access |
+| Excalidraw | Diagrams (create/save/read/export) |
+| codemap | Code search, deps, PageRank, coupling, cycles (6 indexes: default, auth-desk, auth-service, maya-service, maya-web, mumz-cosmos) |
+| playwright | Browser automation (click, fill, snapshot, network) |
