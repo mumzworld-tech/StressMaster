@@ -787,17 +787,29 @@ src/
 └── utils/         # Utility functions
 ```
 
-## 📄 License
+## 🔌 MCP Server
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+StressMaster ships an MCP (Model Context Protocol) server so AI coding agents — Claude Code, Kiro, Codex, and any other MCP client — can run load tests programmatically.
 
-## MCP Server
+### Quick Setup (no API key needed)
 
-StressMaster can be used as an MCP (Model Context Protocol) server, allowing AI coding agents like Claude Code, Kiro, and Codex to run load tests programmatically.
+Add to your Claude Code MCP settings (`.claude/settings.json` or `claude_desktop_config.json`):
 
-### Quick Setup
+```json
+{
+  "mcpServers": {
+    "stressmaster": {
+      "command": "stressmaster-mcp"
+    }
+  }
+}
+```
 
-Add to your Claude Code MCP settings:
+That's it. The MCP server uses the calling agent's AI session via **MCP sampling** for natural language parsing — no `AI_API_KEY` required for clients that support sampling (Claude Code, Kiro, Codex).
+
+### Bring your own AI provider (optional)
+
+If your client doesn't support sampling, or you want to pin a specific provider:
 
 ```json
 {
@@ -813,9 +825,19 @@ Add to your Claude Code MCP settings:
 }
 ```
 
-The MCP server exposes 8 tools (`run_load_test`, `parse_command`, `generate_k6_script`, `analyze_results`, `get_config`, `set_config`, `list_templates`, `manage_template`) and 5 resources.
+**Fallback chain:** MCP sampling → configured provider → regex fallback.
 
-See [MCP Server Documentation](src/mcp/README.md) for full details.
+### Exposed surface
+
+| 8 Tools | 5 Resources |
+|---------|-------------|
+| `run_load_test`, `parse_command`, `generate_k6_script`, `analyze_results`, `get_config`, `set_config`, `list_templates`, `manage_template` | `stressmaster://test-history`, `stressmaster://test-result/{id}`, `stressmaster://templates`, `stressmaster://template/{name}`, `stressmaster://config` |
+
+See [`src/mcp/README.md`](src/mcp/README.md) for the full tool reference and troubleshooting.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
